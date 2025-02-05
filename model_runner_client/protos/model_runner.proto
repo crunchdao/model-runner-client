@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+service ModelRunner {
+  rpc InferStream(stream InferRequest) returns (stream InferResponse);
+  rpc Infer(InferRequest) returns (InferResponse);
+  rpc Setup(google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc Reinitialize(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+enum DataType {
+  DOUBLE = 0;
+  INT = 1;
+  STRING = 2;
+  PARQUET = 3;
+  ARROW = 4;
+  JSON = 5;
+}
+
+message InferRequest {
+  DataType type = 1;
+  bytes argument = 2;
+}
+
+message InferResponse {
+  DataType type = 1;
+  bytes prediction = 2;
+}

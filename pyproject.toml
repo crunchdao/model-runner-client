@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "model-runner-client"
+version = "0.1.0"
+description = "Model Runner Client is a Python library that allows Coordinators to manage real-time model synchronization and perform concurrent predictions on distributed model nodes within a Crunch."
+authors = ["boutrig abdennour <abdennour.boutrig@crunchdao.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+grpcio = "^1.70.0"
+pyarrow = "^19.0.0"
+protobuf = "^5.29.3"
+pandas = "^2.2.3"
+websockets = "^14.2"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-asyncio = "^0.25.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[project.urls]
+"Homepage" = "https://github.com/crunchdao/model-runner-client"
+"Bug Tracker" = "https://github.com/crunchdao/model-runner-client/issues"
