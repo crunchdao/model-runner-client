@@ -51,7 +51,7 @@ class ModelConcurrentRunner:
         logger.debug(f"**ModelConcurrentRunner** predict tasks: {tasks}")
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        return {result.model_runner: result for result in results}
+        return {result.model_runner: result for result in results if not isinstance(result, asyncio.CancelledError)}
 
     async def _predict_with_timeout(self, model: ModelRunner, argument_type: DataType, argument_value: bytes):
         try:
