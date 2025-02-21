@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package commons;
+
+enum VariantType {
+  DOUBLE = 0;
+  INT = 1;
+  STRING = 2;
+  PARQUET = 3;
+  ARROW = 4;
+  JSON = 5;
+}
+
+message Variant {
+  VariantType type = 2;
+  bytes value = 3;
+}
+
+message Argument {
+  uint32 position = 1;
+  Variant data = 2;
+}
+
+message KwArgument {
+  string keyword = 1;
+  Variant data = 2;
+}

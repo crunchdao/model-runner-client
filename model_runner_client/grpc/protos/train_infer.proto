@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package train_infer;
+
+import "commons.proto";
+import "google/protobuf/empty.proto";
+
+service TrainInferStreamService {
+  rpc Setup(google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc Infer(InferRequest) returns (InferResponse);
+  //rpc Train(TrainRequest) returns (TrainResponse);
+  rpc Reinitialize(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+service TrainInferService {
+  rpc Setup(google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc Infer(InferRequest) returns (InferResponse);
+  //rpc Train(TrainRequest) returns (TrainResponse);
+  rpc Reinitialize(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+message InferRequest {
+  commons.Variant argument = 1;
+}
+
+message InferResponse {
+  commons.Variant prediction = 1;
+}

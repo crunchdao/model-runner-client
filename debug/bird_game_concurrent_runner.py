@@ -1,8 +1,9 @@
 import asyncio
 import logging
 
-from model_runner_client.model_concurrent_runner import ModelConcurrentRunner
-from model_runner_client.protos.model_runner_pb2 import DataType
+from model_runner_client.model_concurrent_runners.dynamic_subclass_model_concurrent_runner import DynamicSubclassModelConcurrentRunner
+from model_runner_client.grpc.generated.commons_pb2 import VariantType, Argument, Variant
+from model_runner_client.utils.datatype_transformer import encode_data
 
 
 async def main():
@@ -15,14 +16,22 @@ async def main():
     )
     logger = logging.getLogger("model_runner_client")
     logger.setLevel(logging.DEBUG)
-
-    concurrent_runner = ModelConcurrentRunner(timeout=10, crunch_id="bird-game", host="localhost", port=8000)
+    #host = "34.243.84.164"
+    host = "localhost"
+    concurrent_runner = DynamicSubclassModelConcurrentRunner(timeout=10, crunch_id="bird-game", host=host, port=9091, base_classname='birdgame.trackers.trackerbase.TrackerBase')
     await concurrent_runner.init()
 
     async def prediction_call():
         while True:
-            value = {'falcon_location': 21.179864629354732, 'time': 230.96231205799998, 'dove_location': 19.164986723324326, 'falcon_id': 1}
-            result = await concurrent_runner.predict(DataType.JSON, encode_data(DataType.JSON, value))
+            payload = {'falcon_location': 21.179864629354732, 'time': 230.96231205799998, 'dove_location': 19.164986723324326, 'falcon_id': 1}
+            payload_encoded = encode_data(VariantType.JSON, payload)
+            await concurrent_runner.call(method_name='tick',
+                                                  args=[
+                                                      Argument(position=1, data=Variant(type=VariantType.JSON, value=payload_encoded))
+                                                  ])
+
+            result = await concurrent_runner.call(method_name='predict')
+
             for model_runner, model_predict_result in result.items():
                 logger.debug(f"**ModelConcurrentRunner** model_runner: {model_runner.model_id}, model_predict_result: {model_predict_result}")
 

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package dynamic_subclass;
+
+import "commons.proto";
+
+service DynamicSubclassService {
+  rpc Setup(SetupRequest) returns (SetupResponse);
+  rpc Call(CallRequest) returns (CallResponse);
+}
+
+message SetupRequest {
+  string className = 1;
+  repeated commons.Argument instanceArguments = 2;
+  repeated commons.KwArgument instanceKwArguments = 3;
+}
+
+message SetupResponse {}
+
+message CallRequest {
+  string methodName = 1;
+  repeated commons.Argument methodArguments = 2;
+  repeated commons.KwArgument methodKwArguments = 3;
+}
+
+message CallResponse {
+  commons.Variant methodResponse = 1;
+}

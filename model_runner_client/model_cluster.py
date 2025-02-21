@@ -1,6 +1,6 @@
 import logging
 
-from model_runner_client.model_runner import ModelRunner
+from model_runner_client.model_runners.model_runner import ModelRunner
 from model_runner_client.websocket_client import WebsocketClient
 
 logger = logging.getLogger("model_runner_client")
@@ -8,7 +8,7 @@ import asyncio
 
 
 class ModelCluster:
-    def __init__(self, crunch_id: str, ws_host: str, ws_port: int):
+    def __init__(self, crunch_id: str, ws_host: str, ws_port: int, model_factory: callable):
         """
         ModelCluster constructor.
 
@@ -20,6 +20,7 @@ class ModelCluster:
         self.models_run = {}
         logger.debug(f"Initializing ModelCluster with Crunch ID: {crunch_id}")
         self.ws_client = WebsocketClient(ws_host, ws_port, crunch_id, event_handler=self.handle_event)
+        self.model_factory = model_factory
 
     async def init(self):
         await self.ws_client.connect()
@@ -58,6 +59,7 @@ class ModelCluster:
         """
         logger.debug("**ModelCluster** Handling 'init' event.")
         await self.update_model_runs(data)
+        # todo remove all models not present in the list
 
     async def handle_update_event(self, data: list[dict]):
         """
@@ -95,7 +97,7 @@ class ModelCluster:
                     logger.debug(f"**ModelCluster** Model with ID {model_id} is not found in the cluster state, and its state is 'STOPPED'. No action is required.")
                 elif state == "RUNNING":
                     logger.debug(f"**ModelCluster** New model with ID {model_id} is running, we add it to the cluster state.")
-                    model_runner = ModelRunner(model_id, model_name, ip, port)
+                    model_runner = self.model_factory(model_id, model_name, ip, port)
                     tasks.append(self.add_model_runner(model_runner))
                 else:
                     logger.warning(f"**ModelCluster** Model updated: {model_id}, with state: {state} => This state is not handled...")
