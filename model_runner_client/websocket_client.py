@@ -27,6 +27,7 @@ class WebsocketClient:
         self.crunch_id = crunch_id
         self.websocket = None
         self.event_handler = event_handler  # Delegate to ModelCluster
+        self.message_queue = asyncio.Queue()
 
     def __del__(self):
         atexit.register(self.disconnect_sync)
@@ -36,9 +37,10 @@ class WebsocketClient:
         Establish a WebSocket connection.
         """
         retry_count = 0
+        uri = f"ws://{self.host}:{self.port}/{self.crunch_id}"
+
         while self.max_retries > retry_count:
             try:
-                uri = f"ws://{self.host}:{self.port}/{self.crunch_id}"
                 logger.info(f"Connecting to WebSocket server at {uri}")
                 self.websocket = await websockets.connect(uri)
                 logger.info(f"Connected to WebSocket server at {uri}")
@@ -51,6 +53,9 @@ class WebsocketClient:
 
             await asyncio.sleep(self.retry_interval)
             retry_count += 1
+
+        if retry_count == self.max_retries and not self.websocket:
+            raise ConnectionError(f"Failed to connect to WebSocket server at {uri}")
 
     async def init(self):
         """
@@ -74,6 +79,7 @@ class WebsocketClient:
             try:
                 if not await self.is_connected():
                     await self.connect()
+                    await self._send_pending_messages()
 
                 logger.info("Listening for messages...")
                 async for message in self.websocket:
@@ -119,6 +125,35 @@ class WebsocketClient:
                 logger.warning("No event handler defined. Event will be ignored.")
         except json.JSONDecodeError:
             logger.error(f"Failed to decode WebSocket message: {message}")
+
+    async def send_message(self, message: str):
+        """
+        Send a message to the WebSocket server.
+        If the connection is not available, store the message in the queue.
+        """
+        if await self.is_connected():
+            try:
+                await self.websocket.send(message)
+                logger.info(f"Message sent: {message}")
+            except (websockets.ConnectionClosed, websockets.InvalidState, asyncio.TimeoutError) as e:
+                logger.warning(f"Failed to send message, queuing it: {message}. Error: {e}")
+                await self.message_queue.put(message)
+        else:
+            logger.info(f"Connection unavailable, queuing message: {message}")
+            await self.message_queue.put(message)
+
+    async def _send_pending_messages(self):
+        """
+        Process the queue and send pending messages
+        """
+        while not self.message_queue.empty():
+            message = await self.message_queue.get()
+            try:
+                await self.websocket.send(message)
+                logger.info(f"Message sent from queue: {message}")
+            except Exception as e:
+                await self.message_queue.put(message)
+                raise e
 
     def disconnect_sync(self):
         loop = asyncio.get_event_loop()
