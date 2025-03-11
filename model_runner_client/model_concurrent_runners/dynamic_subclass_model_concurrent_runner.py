@@ -1,6 +1,6 @@
 from model_runner_client.grpc.generated.commons_pb2 import Argument, KwArgument
 from model_runner_client.model_concurrent_runners.model_concurrent_runner import ModelConcurrentRunner, ModelPredictResult
-from model_runner_client.model_runners.dynamic_subclass_model_runnner import DynamicSubclassModelRunner
+from model_runner_client.model_runners.dynamic_subclass_model_runner import DynamicSubclassModelRunner
 from model_runner_client.model_runners.model_runner import ModelRunner
 
 

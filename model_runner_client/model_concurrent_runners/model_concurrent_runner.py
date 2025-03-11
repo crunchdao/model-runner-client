@@ -3,6 +3,8 @@ import asyncio
 import logging
 from enum import Enum
 
+from grpc.aio import AioRpcError
+
 from model_runner_client.model_cluster import ModelCluster
 from model_runner_client.model_runners.model_runner import ModelRunner
 
@@ -25,14 +27,23 @@ class ModelPredictResult:
 
 
 class ModelConcurrentRunner:
-    def __init__(self, timeout: int, crunch_id: str, host: str, port: int):
+    MAX_CONSECUTIVE_FAILURES = 3
+    MAX_CONSECUTIVE_TIMEOUTS = 3
+
+    def __init__(self,
+                 timeout: int,
+                 crunch_id: str,
+                 host: str,
+                 port: int,
+                 max_consecutive_failures: int = MAX_CONSECUTIVE_FAILURES,
+                 max_consecutive_timeouts: int = MAX_CONSECUTIVE_TIMEOUTS, ):
         self.timeout = timeout
         self.host = host
         self.port = port
         self.model_cluster = ModelCluster(crunch_id, self.host, self.port, self.create_model_runner)
 
-        # TODO: If the model returns failures exceeding max_consecutive_failures, exclude the model. Maybe also inform the orchestrator to STOP the model ?
-        # self.max_consecutive_failures
+        self.max_consecutive_failures = max_consecutive_failures
+        self.max_consecutive_timeout = max_consecutive_timeouts
 
         # TODO: Implement this. If the option is enabled, allow the model time to recover after a timeout.
         # self.enable_recovery_mode
@@ -66,7 +77,7 @@ class ModelConcurrentRunner:
             for model in self.model_cluster.models_run.values()
         ]
 
-        logger.debug(f"**ModelConcurrentRunner** Executing '{method_name}' tasks concurrently: {tasks}")
+        logger.debug(f"Executing '{method_name}' tasks concurrently: {tasks}")
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         return {result.model_runner: result for result in results if not isinstance(result, asyncio.CancelledError)}
@@ -75,10 +86,26 @@ class ModelConcurrentRunner:
         try:
             # Dynamically fetch the method and call it with the provided arguments
             method = getattr(model, method_name)
-            result = await asyncio.wait_for(method(*args, **kwargs), timeout=self.timeout)
+            result, error = await asyncio.wait_for(method(*args, **kwargs), timeout=self.timeout)
+            if error:
+                if error == ModelRunner.ErrorType.BAD_IMPLEMENTATION:
+                    asyncio.create_task(self.model_cluster.process_failure(model, 'BAD_IMPLEMENTATION'))  # the model will be stopped
+                else:
+                    model.register_failure()
 
-            return ModelPredictResult(model, result, ModelPredictResult.Status.SUCCESS)
-        except asyncio.TimeoutError:
+                    if self.max_consecutive_failures and model.consecutive_failures > self.max_consecutive_failures:
+                        asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_FAILED'))
+
+                return ModelPredictResult(model, None, ModelPredictResult.Status.FAILED)
+            else:
+                model.reset_failures()
+                model.reset_timeouts()
+
+                return ModelPredictResult(model, result, ModelPredictResult.Status.SUCCESS)
+        except (asyncio.TimeoutError, AioRpcError):
+            model.register_timeout()
+
+            if self.max_consecutive_timeout and model.consecutive_timeouts > self.max_consecutive_timeout:
+                asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_TIMEOUT'))
+
             return ModelPredictResult(model, None, ModelPredictResult.Status.TIMEOUT)
-        except Exception as e:
-            return ModelPredictResult(model, str(e), ModelPredictResult.Status.FAILED)

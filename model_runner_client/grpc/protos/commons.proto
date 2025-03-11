@@ -25,3 +25,8 @@ message KwArgument {
   string keyword = 1;
   Variant data = 2;
 }
+
+message Status {
+  string code = 1;  // "SUCCESS", "INVALID_ARGUMENT", etc.
+  string message = 2;
+}

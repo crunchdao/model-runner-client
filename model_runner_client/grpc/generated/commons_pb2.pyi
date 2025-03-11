@@ -48,3 +48,13 @@ class KwArgument(_message.Message):
 
     def __init__(self, keyword: _Optional[str]=..., data: _Optional[_Union[Variant, _Mapping]]=...) -> None:
         ...
+
+class Status(_message.Message):
+    __slots__ = ('code', 'message')
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    code: str
+    message: str
+
+    def __init__(self, code: _Optional[str]=..., message: _Optional[str]=...) -> None:
+        ...

@@ -1,9 +1,10 @@
+import json
 import logging
 
 from model_runner_client.model_runners.model_runner import ModelRunner
 from model_runner_client.websocket_client import WebsocketClient
 
-logger = logging.getLogger("model_runner_client")
+logger = logging.getLogger("model_runner_client.model_cluster")
 import asyncio
 
 
@@ -40,15 +41,15 @@ class ModelCluster:
         """
         try:
             if event_type == "init":
-                logger.debug(f"**ModelCluster** Processing event type: {event_type}")
+                logger.debug(f"Processing event type: {event_type}")
                 await self.handle_init_event(data)
             elif event_type == "update":
-                logger.debug(f"**ModelCluster** Processing event type: {event_type}")
+                logger.debug(f"Processing event type: {event_type}")
                 await self.handle_update_event(data)
             else:
-                logger.warning(f"**ModelCluster** Unknown event type received: {event_type}")
+                logger.warning(f"Unknown event type received: {event_type}")
         except Exception as e:
-            logger.error(f"**ModelCluster** Error processing event {event_type}: {e}", exc_info=True)
+            logger.error(f"Error processing event {event_type}: {e}", exc_info=True)
             raise e
 
     async def handle_init_event(self, data: list[dict]):
@@ -57,9 +58,15 @@ class ModelCluster:
         
         :param data: List of models with their initial states.
         """
-        logger.debug("**ModelCluster** Handling 'init' event.")
+        logger.debug("Handling 'init' event.")
         await self.update_model_runs(data)
-        # todo remove all models not present in the list
+
+        # Remove models in `self.models_run` that are not present in `data`
+        data_model_ids = {model['model_id'] for model in data}
+        models_to_remove = self.models_run.keys() - data_model_ids
+        tasks = [self.remove_model_runner(self.models_run[model_id]) for model_id in models_to_remove]
+        await asyncio.gather(*tasks)
+        logger.debug(f"Models with IDs {models_to_remove} removed as they are not in the 'init' event data.")
 
     async def handle_update_event(self, data: list[dict]):
         """
@@ -67,7 +74,7 @@ class ModelCluster:
         
         :param data: List of models with their updated states.
         """
-        logger.debug("**ModelCluster** Handling 'update' event.")
+        logger.debug("Handling 'update' event.")
         await self.update_model_runs(data)
 
     async def update_model_runs(self, data):
@@ -78,7 +85,7 @@ class ModelCluster:
             state = model_update.get("state")
             ip = model_update.get("ip")
             port = model_update.get("port")
-            logger.debug(f"**ModelCluster** Updating model with ID: {model_id}")
+            logger.debug(f"Updating model with ID: {model_id}")
 
             # Find the model in the current state
             model_runner = self.models_run.get(model_id)
@@ -87,20 +94,20 @@ class ModelCluster:
                 if state == "STOPPED":
                     # Remove model if state is "stopped"
                     tasks.append(self.remove_model_runner(model_runner))
-                    logger.debug(f"**ModelCluster** Model with ID {model_id} removed due to 'stopped' state.")
+                    logger.debug(f"Model with ID {model_id} removed due to 'stopped' state.")
                 elif state == "RUNNING":
-                    logger.debug(f"**ModelCluster** Model with ID {model_id} is already running in the cluster. Skipping update for '{model_name}' with state: {state}.")
+                    logger.debug(f"Model with ID {model_id} is already running in the cluster. Skipping update for '{model_name}' with state: {state}.")
                 else:
-                    logger.warning(f"**ModelCluster** Model updated: {model_id}, with state: {state} => This state is not handled...")
+                    logger.warning(f"Model updated: {model_id}, with state: {state} => This state is not handled...")
             else:
                 if state == "STOPPED":
-                    logger.debug(f"**ModelCluster** Model with ID {model_id} is not found in the cluster state, and its state is 'STOPPED'. No action is required.")
+                    logger.debug(f"Model with ID {model_id} is not found in the cluster state, and its state is 'STOPPED'. No action is required.")
                 elif state == "RUNNING":
-                    logger.debug(f"**ModelCluster** New model with ID {model_id} is running, we add it to the cluster state.")
+                    logger.debug(f"New model with ID {model_id} is running, we add it to the cluster state.")
                     model_runner = self.model_factory(model_id, model_name, ip, port)
                     tasks.append(self.add_model_runner(model_runner))
                 else:
-                    logger.warning(f"**ModelCluster** Model updated: {model_id}, with state: {state} => This state is not handled...")
+                    logger.warning(f"Model updated: {model_id}, with state: {state} => This state is not handled...")
 
         await asyncio.gather(*tasks)
 
@@ -108,16 +115,40 @@ class ModelCluster:
         """
         Asynchronously initialize a model_runner and add it to the cluster state.
         """
-        is_initialized = await model_runner.init()
+        is_initialized, error = await model_runner.init()
         if is_initialized:
             self.models_run[model_runner.model_id] = model_runner
+        else:
+            if error == ModelRunner.ErrorType.BAD_IMPLEMENTATION:
+                await self.process_failure(model_runner, 'BAD_IMPLEMENTATION')
+            elif error == ModelRunner.ErrorType.ABORTED:
+                return
+            elif error == ModelRunner.ErrorType.GRPC_CONNECTION_FAILED:
+                await self.process_failure(model_runner, 'CONNECTION_FAILED')
+            else:
+                await self.process_failure(model_runner, 'MULTIPLE_FAILED')
+
+    async def process_failure(self, model_runner: ModelRunner, failure_code: str):
+        error_msg = {
+            "event": "report_failure",
+            "data": [
+                {
+                    "model_id": model_runner.model_id,
+                    "failure_code": failure_code,
+                    "ip": model_runner.ip
+                }
+            ]
+        }
+        await self.ws_client.send_message(json.dumps(error_msg))
+        await self.remove_model_runner(model_runner)
 
     async def remove_model_runner(self, model_runner: ModelRunner):
         """
         Asynchronously initialize a model_runner and add it to the cluster state.
         """
         await model_runner.close()
-        del self.models_run[model_runner.model_id]
+        if model_runner.model_id in self.models_run:
+            del self.models_run[model_runner.model_id]
 
     async def start(self):
         """
@@ -126,4 +157,4 @@ class ModelCluster:
         try:
             await self.ws_client.connect()
         except Exception as e:
-            logger.error(f"**ModelCluster** Failed to start WebSocket client: {e}", exc_info=True)
+            logger.error(f"Failed to start WebSocket client: {e}", exc_info=True)

@@ -8,7 +8,7 @@ from google.protobuf import empty_pb2
 
 from model_runner_client.utils.datatype_transformer import decode_data
 
-logger = logging.getLogger("model_runner_client")
+logger = logging.getLogger("model_runner_client.TrainInferModelRunner")
 
 
 class TrainInferModelRunner(ModelRunner):
@@ -33,14 +33,16 @@ class TrainInferModelRunner(ModelRunner):
     async def setup(self, grpc_channel):
         self.grpc_stub = TrainInferServiceStub(self.grpc_channel)
         await self.grpc_stub.Setup(empty_pb2.Empty())
+        # todo better handle errors
+        return True, None
 
     async def predict(self, argument_type: VariantType, argument_value: bytes):
-        logger.debug(f"**ModelRunner** Doing prediction of model_id:{self.model_id}, name:{self.model_name}, argument_type:{argument_type}")
+        logger.debug(f"Doing prediction of model_id:{self.model_id}, name:{self.model_name}, argument_type:{argument_type}")
         prediction_request = InferRequest(Variant(type=argument_type, value=argument_value))
 
         response: InferResponse = await self.grpc_stub.Infer(prediction_request)
 
-        return decode_data(response.prediction.value, response.prediction.type)
+        return decode_data(response.prediction.value, response.prediction.type), None
 
     async def train(self, argument_type: VariantType, argument_value: bytes):
         raise Exception("Not implemented yet")

@@ -16,8 +16,7 @@ async def main():
     )
     logger = logging.getLogger("model_runner_client")
     logger.setLevel(logging.DEBUG)
-    #host = "34.243.84.164"
-    host = "localhost"
+    #host = "localhost"
     concurrent_runner = DynamicSubclassModelConcurrentRunner(timeout=10, crunch_id="bird-game", host=host, port=9091, base_classname='birdgame.trackers.trackerbase.TrackerBase')
     await concurrent_runner.init()
 

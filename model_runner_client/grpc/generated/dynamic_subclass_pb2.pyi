@@ -1,4 +1,5 @@
 import commons_pb2 as _commons_pb2
+from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -18,9 +19,11 @@ class SetupRequest(_message.Message):
         ...
 
 class SetupResponse(_message.Message):
-    __slots__ = ()
+    __slots__ = ('status',)
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    status: _commons_pb2.Status
 
-    def __init__(self) -> None:
+    def __init__(self, status: _Optional[_Union[_commons_pb2.Status, _Mapping]]=...) -> None:
         ...
 
 class CallRequest(_message.Message):
@@ -36,9 +39,19 @@ class CallRequest(_message.Message):
         ...
 
 class CallResponse(_message.Message):
-    __slots__ = ('methodResponse',)
+    __slots__ = ('status', 'methodResponse')
+    STATUS_FIELD_NUMBER: _ClassVar[int]
     METHODRESPONSE_FIELD_NUMBER: _ClassVar[int]
+    status: _commons_pb2.Status
     methodResponse: _commons_pb2.Variant
 
-    def __init__(self, methodResponse: _Optional[_Union[_commons_pb2.Variant, _Mapping]]=...) -> None:
+    def __init__(self, status: _Optional[_Union[_commons_pb2.Status, _Mapping]]=..., methodResponse: _Optional[_Union[_commons_pb2.Variant, _Mapping]]=...) -> None:
+        ...
+
+class RestResponse(_message.Message):
+    __slots__ = ('status',)
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    status: _commons_pb2.Status
+
+    def __init__(self, status: _Optional[_Union[_commons_pb2.Status, _Mapping]]=...) -> None:
         ...

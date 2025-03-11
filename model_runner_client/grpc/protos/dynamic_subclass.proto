@@ -3,10 +3,12 @@ syntax = "proto3";
 package dynamic_subclass;
 
 import "commons.proto";
+import "google/protobuf/empty.proto";
 
 service DynamicSubclassService {
   rpc Setup(SetupRequest) returns (SetupResponse);
   rpc Call(CallRequest) returns (CallResponse);
+  rpc Rest(google.protobuf.Empty) returns (RestResponse);
 }
 
 message SetupRequest {
@@ -15,7 +17,9 @@ message SetupRequest {
   repeated commons.KwArgument instanceKwArguments = 3;
 }
 
-message SetupResponse {}
+message SetupResponse {
+  commons.Status status = 1;
+}
 
 message CallRequest {
   string methodName = 1;
@@ -24,5 +28,10 @@ message CallRequest {
 }
 
 message CallResponse {
-  commons.Variant methodResponse = 1;
+  commons.Status status = 1;
+  commons.Variant methodResponse = 2;
+}
+
+message RestResponse {
+  commons.Status status = 1;
 }

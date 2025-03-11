@@ -3,6 +3,7 @@ from model_runner_client.grpc.generated.commons_pb2 import Variant, VariantType,
 from model_runner_client.grpc.generated.dynamic_subclass_pb2 import SetupRequest, SetupResponse, CallRequest, CallResponse
 from model_runner_client.grpc.generated.dynamic_subclass_pb2_grpc import DynamicSubclassServiceStub
 from model_runner_client.utils.datatype_transformer import decode_data
+from model_runner_client.errors import InvalidCoordinatorUsageError
 
 
 class DynamicSubclassModelRunner(ModelRunner):
@@ -37,7 +38,7 @@ class DynamicSubclassModelRunner(ModelRunner):
 
         super().__init__(model_id, model_name, ip, port)
 
-    async def setup(self, grpc_channel):
+    async def setup(self, grpc_channel) -> tuple[bool, ModelRunner.ErrorType | None]:
         """
         Asynchronously setup the gRPC stub and initialize the model instance
         with the base class name via the DynamicSubclassServiceStub.
@@ -46,9 +47,18 @@ class DynamicSubclassModelRunner(ModelRunner):
             Any exceptions raised during the gRPC Setup call.
         """
         self.grpc_stub = DynamicSubclassServiceStub(grpc_channel)
-        await self.grpc_stub.Setup(SetupRequest(className=self.base_classname, instanceArguments=self.instance_args, instanceKwArguments=self.instance_kwargs))
+        setup_response: SetupResponse = await self.grpc_stub.Setup(SetupRequest(className=self.base_classname, instanceArguments=self.instance_args, instanceKwArguments=self.instance_kwargs))
+        status_code = setup_response.status.code
+        if status_code == 'SUCCESS':
+            return True, None
+        elif status_code == 'INVALID_ARGUMENT':
+            raise InvalidCoordinatorUsageError(setup_response.status.message)
+        elif status_code == 'BAD_IMPLEMENTATION':
+            return False, self.ErrorType.BAD_IMPLEMENTATION
+        else:
+            return False, self.ErrorType.FAILED
 
-    async def call(self, method_name: str, args: list[Argument] = None, kwargs: list[KwArgument] = None):
+    async def call(self, method_name: str, args: list[Argument] = None, kwargs: list[KwArgument] = None) -> tuple[any, ModelRunner.ErrorType | None]:
         """
         An asynchronous method for executing a remote procedure call over gRPC using method name,
         arguments, and keyword arguments.
@@ -59,11 +69,19 @@ class DynamicSubclassModelRunner(ModelRunner):
             kwargs (list[KwArgument]): A list of keyword arguments for the remote method.
         """
         if self.grpc_stub is None:
-            raise Exception("gRPC stub is not initialized, please call setup() first.")
+            raise InvalidCoordinatorUsageError("gRPC stub is not initialized, please call setup() first.")
 
         call_request = CallRequest(methodName=method_name, methodArguments=args, methodKwArguments=kwargs)
         call_response: CallResponse = await self.grpc_stub.Call(call_request)
         if call_response is None:
-            raise Exception("gRPC call failed.")
+            return None, self.ErrorType.FAILED
 
-        return decode_data(call_response.methodResponse.value, call_response.methodResponse.type)
+        status_code = call_response.status.code
+        if status_code == 'SUCCESS':
+            return decode_data(call_response.methodResponse.value, call_response.methodResponse.type), None
+        elif status_code == 'INVALID_ARGUMENT' or status_code == 'FAILED_PRECONDITION':
+            raise InvalidCoordinatorUsageError(call_response.status.message)
+        elif status_code == 'BAD_IMPLEMENTATION':
+            return None, self.ErrorType.BAD_IMPLEMENTATION
+        else:
+            return None, self.ErrorType.FAILED
