@@ -9,7 +9,9 @@ from model_runner_client.grpc.generated.commons_pb2 import VariantType
 
 # Encoder: Converts data to bytes
 def encode_data(data_type: VariantType, data) -> bytes:
-    if data_type == VariantType.DOUBLE:
+    if data_type == VariantType.NONE:
+        return b""
+    elif data_type == VariantType.DOUBLE:
         return struct.pack("d", data)
     elif data_type == VariantType.INT:
         return data.to_bytes(8, byteorder="little", signed=True)
@@ -32,7 +34,9 @@ def encode_data(data_type: VariantType, data) -> bytes:
 
 # Decoder: Converts bytes to data
 def decode_data(data_bytes: bytes, data_type: VariantType):
-    if data_type == VariantType.DOUBLE:
+    if data_type == VariantType.NONE:
+        return None
+    elif data_type == VariantType.DOUBLE:
         return struct.unpack("d", data_bytes)[0]
     elif data_type == VariantType.INT:
         return int.from_bytes(data_bytes, byteorder="little", signed=True)
@@ -57,7 +61,9 @@ def detect_data_type(data) -> VariantType:
     Detects the data type based on the Python object and returns
     the corresponding VariantType enum.
     """
-    if isinstance(data, float):
+    if data is None:
+        return VariantType.NONE
+    elif isinstance(data, float):
         return VariantType.DOUBLE
     elif isinstance(data, int):
         return VariantType.INT

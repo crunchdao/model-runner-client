@@ -86,7 +86,11 @@ class ModelConcurrentRunner:
         try:
             # Dynamically fetch the method and call it with the provided arguments
             method = getattr(model, method_name)
-            result, error = await asyncio.wait_for(method(*args, **kwargs), timeout=self.timeout)
+            try :
+                result, error = await asyncio.wait_for(method(*args, **kwargs), timeout=self.timeout)
+            except ValueError as e: # decode error
+                error = ModelRunner.ErrorType.FAILED
+
             if error:
                 if error == ModelRunner.ErrorType.BAD_IMPLEMENTATION:
                     asyncio.create_task(self.model_cluster.process_failure(model, 'BAD_IMPLEMENTATION'))  # the model will be stopped
@@ -109,3 +113,7 @@ class ModelConcurrentRunner:
                 asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_TIMEOUT'))
 
             return ModelPredictResult(model, None, ModelPredictResult.Status.TIMEOUT)
+
+        except Exception as e:
+            logger.error(f"Unexpected error during concurrent execution of method {method_name} on model {model.model_id}", exc_info=True)
+            return ModelPredictResult(model, None, ModelPredictResult.Status.FAILED)

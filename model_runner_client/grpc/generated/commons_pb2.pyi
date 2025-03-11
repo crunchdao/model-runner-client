@@ -6,12 +6,14 @@ DESCRIPTOR: _descriptor.FileDescriptor
 
 class VariantType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
+    NONE: _ClassVar[VariantType]
     DOUBLE: _ClassVar[VariantType]
     INT: _ClassVar[VariantType]
     STRING: _ClassVar[VariantType]
     PARQUET: _ClassVar[VariantType]
     ARROW: _ClassVar[VariantType]
     JSON: _ClassVar[VariantType]
+NONE: VariantType
 DOUBLE: VariantType
 INT: VariantType
 STRING: VariantType

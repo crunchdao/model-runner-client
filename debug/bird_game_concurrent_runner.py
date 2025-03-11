@@ -16,7 +16,7 @@ async def main():
     )
     logger = logging.getLogger("model_runner_client")
     logger.setLevel(logging.DEBUG)
-    #host = "localhost"
+    host = "localhost"
     concurrent_runner = DynamicSubclassModelConcurrentRunner(timeout=10, crunch_id="bird-game", host=host, port=9091, base_classname='birdgame.trackers.trackerbase.TrackerBase')
     await concurrent_runner.init()
 
@@ -32,9 +32,9 @@ async def main():
             result = await concurrent_runner.call(method_name='predict')
 
             for model_runner, model_predict_result in result.items():
-                logger.debug(f"**ModelConcurrentRunner** model_runner: {model_runner.model_id}, model_predict_result: {model_predict_result}")
+                logger.debug(f"model_runner: {model_runner.model_id}, model_predict_result: {model_predict_result}")
 
-            logger.debug("**ModelConcurrentRunner** sleeping for 30 seconds")
+            logger.debug("sleeping for 30 seconds")
             await asyncio.sleep(30)
 
     await asyncio.gather(asyncio.create_task(concurrent_runner.sync()), asyncio.create_task(prediction_call()))
