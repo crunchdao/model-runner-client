@@ -81,7 +81,8 @@ class ModelCluster:
         tasks = []
         for model_update in data:
             model_id = model_update.get("model_id")
-            model_name = model_update.get("model_name")
+            infos = model_update.get("infos")
+            model_name = infos.get("model_name") if infos else None
             state = model_update.get("state")
             ip = model_update.get("ip")
             port = model_update.get("port")
@@ -96,7 +97,8 @@ class ModelCluster:
                     tasks.append(self.remove_model_runner(model_runner))
                     logger.debug(f"Model with ID {model_id} removed due to 'stopped' state.")
                 elif state == "RUNNING":
-                    logger.debug(f"Model with ID {model_id} is already running in the cluster. Skipping update for '{model_name}' with state: {state}.")
+                    logger.debug(f"Model with ID {model_id} is already running in the cluster. Updating infos")
+                    model_runner.infos = infos
                 else:
                     logger.warning(f"Model updated: {model_id}, with state: {state} => This state is not handled...")
             else:
@@ -104,7 +106,7 @@ class ModelCluster:
                     logger.debug(f"Model with ID {model_id} is not found in the cluster state, and its state is 'STOPPED'. No action is required.")
                 elif state == "RUNNING":
                     logger.debug(f"New model with ID {model_id} is running, we add it to the cluster state.")
-                    model_runner = self.model_factory(model_id, model_name, ip, port)
+                    model_runner = self.model_factory(model_id, model_name, ip, port, infos)
                     tasks.append(self.add_model_runner(model_runner))
                 else:
                     logger.warning(f"Model updated: {model_id}, with state: {state} => This state is not handled...")

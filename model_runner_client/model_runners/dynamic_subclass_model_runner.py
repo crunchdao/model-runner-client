@@ -14,6 +14,7 @@ class DynamicSubclassModelRunner(ModelRunner):
                  model_name: str,
                  ip: str,
                  port: int,
+                 infos: dict,
                  instance_args: list[Argument] = None,
                  instance_kwargs: list[KwArgument] = None,
                  ):
@@ -36,7 +37,7 @@ class DynamicSubclassModelRunner(ModelRunner):
 
         self.grpc_stub: DynamicSubclassServiceStub = None
 
-        super().__init__(model_id, model_name, ip, port)
+        super().__init__(model_id, model_name, ip, port, infos)
 
     async def setup(self, grpc_channel) -> tuple[bool, ModelRunner.ErrorType | None]:
         """

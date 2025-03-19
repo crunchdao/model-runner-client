@@ -56,7 +56,7 @@ class ModelConcurrentRunner:
         await self.model_cluster.sync()
 
     @abc.abstractmethod
-    def create_model_runner(self, model_id: str, model_name: str, ip: str, port: int) -> ModelRunner:
+    def create_model_runner(self, model_id: str, model_name: str, ip: str, port: int, infos: dict) -> ModelRunner:
         pass
 
     async def _execute_concurrent_method(self, method_name: str, *args, **kwargs) -> dict[ModelRunner, ModelPredictResult]:

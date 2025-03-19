@@ -16,7 +16,8 @@ class TrainInferModelRunner(ModelRunner):
                  model_id: str,
                  model_name: str,
                  ip: str,
-                 port: int):
+                 port: int,
+                 infos: dict):
         """
         Initialize the TrainInferModelRunner.
 
@@ -28,7 +29,7 @@ class TrainInferModelRunner(ModelRunner):
         """
 
         self.grpc_stub = None
-        super().__init__(model_id, model_name, ip, port)
+        super().__init__(model_id, model_name, ip, port, infos)
 
     async def setup(self, grpc_channel):
         self.grpc_stub = TrainInferServiceStub(self.grpc_channel)

@@ -23,12 +23,14 @@ class ModelRunner:
                  model_name: str,
                  ip: str,
                  port: int,
+                 infos: dict,
                  retry_backoff_factor: float = 2):
 
         self.model_id = model_id
         self.model_name = model_name
         self.ip = ip
         self.port = port
+        self.infos = infos
         logger.info(f"New model runner created: {self.model_id}, {self.model_name}, {self.ip}:{self.port}, let's connect it")
         self.retry_backoff_factor = retry_backoff_factor
 

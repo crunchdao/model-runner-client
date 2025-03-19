@@ -7,11 +7,11 @@ from model_runner_client.model_runners.model_runner import ModelRunner
 
 class TestModelConcurrentRunner(IsolatedAsyncioTestCase):
     def setUp(self):
-        self.model_runner_1 = ModelRunner("mock_model_1", "MockModel", "127.0.0.1", 1234)
+        self.model_runner_1 = ModelRunner("mock_model_1", "MockModel", "127.0.0.1", 1234, {})
         self.model_runner_1.test_method = AsyncMock(return_value=("mock_result_1", None))
         self.model_runner_1.init = AsyncMock()
 
-        self.model_runner_2 = ModelRunner("mock_model_2", "MockModel", "127.0.0.1", 1234)
+        self.model_runner_2 = ModelRunner("mock_model_2", "MockModel", "127.0.0.1", 1234, {})
         self.model_runner_2.test_method = AsyncMock(return_value=("mock_result_2", None))
         self.model_runner_2.init = AsyncMock()
 

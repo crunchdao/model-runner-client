@@ -13,8 +13,8 @@ from model_runner_client.model_concurrent_runners.model_concurrent_runner import
 from model_runner_client.model_runners.dynamic_subclass_model_runner import DynamicSubclassModelRunner
 
 
-def create_model_runner(model_id, model_name, ip, port):
-    model_runner = DynamicSubclassModelRunner('birdgame.trackers.trackerbase.TrackerBase', model_id, model_name, ip, port)
+def create_model_runner(model_id, model_name, ip, port, infos):
+    model_runner = DynamicSubclassModelRunner('birdgame.trackers.trackerbase.TrackerBase', model_id, model_name, ip, port, infos)
     return model_runner
 
 
@@ -22,17 +22,18 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
 
     async def ws_handler(self, websocket):
         self.websocket_client = websocket
-        self.model_runner_1 = create_model_runner("test_id_1", "test_name", "127.0.0.1", 5000)
         self.client_messages = []
         msg = {
             "event": "init", "data":
                 [
                     {
-                        "model_id": self.model_runner_1.model_id,
-                        "model_name": self.model_runner_1.model_name,
+                        "model_id": "test_id_1",
+                        "model_name": "test_name",
                         "state": "RUNNING",
-                        "ip": self.model_runner_1.ip,
-                        "port": self.model_runner_1.port}
+                        "ip": "127.0.0.1",
+                        "port": 5000,
+                        "infos": {"model_name": "test1_model_name", "cruncher_id": "test1_cruncher_id", "cruncher_name": "test1_cruncher_name"}
+                    }
                 ]
         }
         await self.websocket_client.send(json.dumps(msg))
@@ -75,25 +76,25 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
         await asyncio.sleep(1)  # give time to server starting
         await self.instance.init()
 
-
         # after init
         self.assertEqual(1, len(self.instance.model_cluster.models_run))
 
-        self.model_runner_2 = create_model_runner("test_id_2", "test_name", "127.0.0.1", 5001)
+        # here we test a new model joining in the middle time
         msg_up = {
             "event": "update", "data":
                 [
                     {
-                        "model_id": self.model_runner_2.model_id,
-                        "model_name": self.model_runner_2.model_name,
+                        "model_id": "test_id_2",
+                        "model_name": "test_name",
                         "state": "RUNNING",
-                        "ip": self.model_runner_2.ip,
-                        "port": self.model_runner_2.port}
+                        "ip": "127.0.0.1",
+                        "port": 5001,
+                        "infos": {"model_name": "test2_model_name", "cruncher_id": "test2_cruncher_id", "cruncher_name": "test2_cruncher_name"}
+                    }
                 ]
         }
 
         await self.websocket_client.send(json.dumps(msg_up))
-
         try:
             await asyncio.wait_for(self.instance.sync(), timeout=1)
         except asyncio.TimeoutError:
@@ -162,3 +163,46 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
         self.assertEqual(fist_data["failure_code"], "BAD_IMPLEMENTATION")
         self.assertEqual(fist_data["model_id"], "test_id_1")
         self.assertEqual(fist_data["ip"], "127.0.0.1")
+
+    @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
+    @patch('model_runner_client.model_runners.dynamic_subclass_model_runner.DynamicSubclassServiceStub', new_callable=MagicMock)
+    async def test_update_infos(self, mock_grpc_sub, mock_insecure_channel):
+        mock_instance = MagicMock()
+        mock_grpc_sub.return_value = mock_instance
+
+        mock_instance.Setup = AsyncMock(return_value=SetupResponse(
+            status=commons_pb2.Status(code='SUCCESS', message='OK')
+        ))
+
+        print("start websocket")
+        task = asyncio.create_task(self._start_test_websocket_server())
+        print("websocket started")
+        await asyncio.sleep(1)  # give time to server starting
+        await self.instance.init()
+
+        # after init
+        self.assertEqual(1, len(self.instance.model_cluster.models_run))
+        self.assertEqual(self.instance.model_cluster.models_run["test_id_1"].infos, {"model_name": "test1_model_name", "cruncher_id": "test1_cruncher_id", "cruncher_name": "test1_cruncher_name"})
+
+        # here we test an update of model infos
+        msg_up = {
+            "event": "update", "data":
+                [
+                    {
+                        "model_id": "test_id_1",
+                        "model_name": "test_name",
+                        "state": "RUNNING",
+                        "ip": "127.0.0.1",
+                        "port": 5001,
+                        "infos": {"model_name": "test1b_model_name", "cruncher_id": "test1b_cruncher_id", "cruncher_name": "test1b_cruncher_name"}
+                    }
+                ]
+        }
+
+        await self.websocket_client.send(json.dumps(msg_up))
+        try:
+            await asyncio.wait_for(self.instance.sync(), timeout=1)
+        except asyncio.TimeoutError:
+            pass
+        self.assertEqual(1, len(self.instance.model_cluster.models_run))
+        self.assertEqual(self.instance.model_cluster.models_run["test_id_1"].infos, {"model_name": "test1b_model_name", "cruncher_id": "test1b_cruncher_id", "cruncher_name": "test1b_cruncher_name"})

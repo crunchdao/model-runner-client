@@ -37,11 +37,11 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
 
         super().__init__(timeout, crunch_id, host, port)
 
-    def create_model_runner(self, model_id: str, model_name: str, ip: str, port: int) -> ModelRunner:
+    def create_model_runner(self, model_id: str, model_name: str, ip: str, port: int, infos: dict) -> ModelRunner:
         """
         Factory method to create a model runner instance
         """
-        return DynamicSubclassModelRunner(self.base_classname, model_id, model_name, ip, port, self.instance_args, self.instance_kwargs)
+        return DynamicSubclassModelRunner(self.base_classname, model_id, model_name, ip, port, infos, self.instance_args, self.instance_kwargs)
 
     async def call(self, method_name: str, args: list[Argument] = None, kwargs: list[KwArgument] = None) -> dict[ModelRunner, ModelPredictResult]:
         """
