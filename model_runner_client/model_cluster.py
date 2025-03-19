@@ -130,13 +130,14 @@ class ModelCluster:
             else:
                 await self.process_failure(model_runner, 'MULTIPLE_FAILED')
 
-    async def process_failure(self, model_runner: ModelRunner, failure_code: str):
+    async def process_failure(self, model_runner: ModelRunner, failure_code: str, failure_reason: str = None):
         error_msg = {
             "event": "report_failure",
             "data": [
                 {
                     "model_id": model_runner.model_id,
                     "failure_code": failure_code,
+                    "failure_reason": failure_reason,
                     "ip": model_runner.ip
                 }
             ]
