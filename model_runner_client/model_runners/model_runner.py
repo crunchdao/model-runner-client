@@ -80,7 +80,6 @@ class ModelRunner:
 
     def register_failure(self):
         self.consecutive_failures += 1
-        print(self.consecutive_failures)
 
     def register_timeout(self):
         self.consecutive_timeouts += 1
