@@ -62,7 +62,7 @@ class ModelRunner:
                 logger.debug(f"Model runner {self.model_id} closed, aborting initialization")
                 return False, self.ErrorType.ABORTED
             try:
-                self.grpc_channel = create_grpc_channel();
+                self.grpc_channel = self.create_grpc_channel();
                 # todo what happen is this take long time, need to add timeout ????
                 setup_succeed, error = await self.setup(self.grpc_channel)
                 if setup_succeed:
