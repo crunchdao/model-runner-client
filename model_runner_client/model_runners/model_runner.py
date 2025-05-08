@@ -1,6 +1,7 @@
 import abc
 import asyncio
 import logging
+import ipaddress
 from enum import Enum
 
 import grpc
@@ -45,13 +46,23 @@ class ModelRunner:
     async def setup(self, grpc_channel) -> tuple[bool, ErrorType | None]:
         pass
 
+    def create_grpc_channel(self):
+        ip_address = self.ip
+        try:
+            ipaddress.ip_address(ip_address)
+            return grpc.aio.insecure_channel(f"{self.ip}:{self.port}")
+        except ValueError:
+            # assume that the ip is a domain name, then we need to use a secure channel
+            return grpc.aio.secure_channel(f"{self.ip}:{self.port}")
+        
+
     async def init(self) -> tuple[bool, ErrorType | None]:
         for attempt in range(1, self.retry_attempts + 1):
             if self.closed:
                 logger.debug(f"Model runner {self.model_id} closed, aborting initialization")
                 return False, self.ErrorType.ABORTED
             try:
-                self.grpc_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}")
+                self.grpc_channel = create_grpc_channel();
                 # todo what happen is this take long time, need to add timeout ????
                 setup_succeed, error = await self.setup(self.grpc_channel)
                 if setup_succeed:
