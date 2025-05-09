@@ -2,6 +2,9 @@ import abc
 import asyncio
 import logging
 import ipaddress
+import os
+import base64
+
 from enum import Enum
 
 import grpc
@@ -53,8 +56,15 @@ class ModelRunner:
             return grpc.aio.insecure_channel(f"{self.ip}:{self.port}")
         except ValueError:
             # assume that the ip is a domain name, then we need to use a secure channel
-            return grpc.aio.secure_channel(f"{self.ip}:{self.port}")
-        
+            host_name = f"{self.ip}:{self.port}" if self.port > 0 else self.ip
+            ssl_trusted_cert = os.getenv('SSL_TRUSTED_CERT')
+            if ssl_trusted_cert:
+                # self signed cert trust, added from the environment variable
+                credentials = grpc.ssl_channel_credentials(root_certificates=base64.b64decode(ssl_trusted_cert))
+                return grpc.aio.secure_channel(host_name, credentials)
+            else:
+                return grpc.aio.secure_channel(host_name)
+            
 
     async def init(self) -> tuple[bool, ErrorType | None]:
         for attempt in range(1, self.retry_attempts + 1):
