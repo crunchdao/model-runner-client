@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable, Union
 
 from ..grpc.generated.commons_pb2 import Argument, KwArgument
 from ..model_concurrent_runners.model_concurrent_runner import (
@@ -66,8 +66,8 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
     async def call(
         self,
         method_name: str,
-        args: list[Argument] = [],
-        kwargs: list[KwArgument] = [],
+        args: Callable[[DynamicSubclassModelRunner], list[Argument]] | list[Argument] = [],
+        kwargs: Callable[[DynamicSubclassModelRunner], list[KwArgument]] | list[KwArgument] = [],
     ) -> dict[ModelRunner, ModelPredictResult]:
         """
         Executes a specific method concurrently on all connected model runners.

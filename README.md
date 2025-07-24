@@ -87,6 +87,35 @@ if __name__ == "__main__":
         print("\nReceived exit signal, shutting down gracefully.")
 ```
 
+### Per-model calls
+
+For the `DynamicSubclassModelConcurrentRunner`, both `args` and `kwargs` can be a callable that accepts a single parameter: the `model_runner` instance. This allows you to customise the data sent to each model.
+
+```python
+def prepare_args(model_runner: DynamicSubclassModelRunner):
+    payload = {
+        'falcon_location': 21.179864629354732,
+        'time': 230.96231205799998,
+        'dove_location': 19.164986723324326,
+        'falcon_id': 1,
+
+        # Per-model value
+        "model_id": model_runner.model_id,
+    }
+
+    return [
+        Argument(
+            position=1,
+            data=Variant(type=VariantType.JSON, value=encode_data(VariantType.JSON, payload))
+        )
+    ]
+
+await concurrent_runner.call(
+    method_name='tick',
+    args=prepare_args,
+)
+```
+
 ### Important Notes
 
 - **Prediction Failures & Timeouts**: A prediction may fail or exceed the defined timeout, so be sure to handle these cases appropriately. Refer to `ModelPredictResult.Status` for details.

@@ -1,4 +1,4 @@
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 from ..errors import InvalidCoordinatorUsageError
 from ..grpc.generated.commons_pb2 import Argument, KwArgument
@@ -64,7 +64,12 @@ class DynamicSubclassModelRunner(ModelRunner):
         else:
             return False, self.ErrorType.FAILED
 
-    async def call(self, method_name: str, args: list[Argument] = [], kwargs: list[KwArgument] = []) -> tuple[Any, ModelRunner.ErrorType | None]:
+    async def call(
+        self,
+        method_name: str,
+        args: Callable[["DynamicSubclassModelRunner"], list[Argument]] | list[Argument] = [],
+        kwargs: Callable[["DynamicSubclassModelRunner"], list[KwArgument]] | list[KwArgument] = [],
+    ) -> tuple[Any, ModelRunner.ErrorType | None]:
         """
         An asynchronous method for executing a remote procedure call over gRPC using method name,
         arguments, and keyword arguments.
@@ -74,6 +79,12 @@ class DynamicSubclassModelRunner(ModelRunner):
             args (list[Argument]): A list of positional arguments for the remote method.
             kwargs (list[KwArgument]): A list of keyword arguments for the remote method.
         """
+
+        if callable(args):
+            args = args(self)
+
+        if callable(kwargs):
+            kwargs = kwargs(self)
 
         if self.grpc_stub is None:
             raise InvalidCoordinatorUsageError("gRPC stub is not initialized, please call setup() first.")
