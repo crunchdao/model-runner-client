@@ -107,9 +107,13 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
             methodResponse=Variant(type=VariantType.STRING, value=b"PREDICTION")
         ))
 
-        result = await self.instance.call(method_name='tick',
-                                          args=[Argument(position=1, data=Variant(type=VariantType.STRING, value=b"PAYLOAD_TEST"))]
-                                          )
+        result = await self.instance.call(
+            method_name='tick',
+            arguments=(
+                [Argument(position=1, data=Variant(type=VariantType.STRING, value=b"PAYLOAD_TEST"))],
+                None,
+            )
+        )
 
         self.assertEqual(2, len(result))
         model_ids_result = {model.model_id: result for model, result in result.items()}
@@ -144,9 +148,13 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
             methodResponse=None
         ))
 
-        result = await self.instance.call(method_name='tick',
-                                          args=[Argument(position=1, data=Variant(type=VariantType.STRING, value=b"PAYLOAD_TEST"))]
-                                          )
+        result = await self.instance.call(
+            method_name='tick',
+            arguments=(
+                [Argument(position=1, data=Variant(type=VariantType.STRING, value=b"PAYLOAD_TEST"))],
+                None,
+            )
+        )
 
         self.assertEqual(1, len(result))
         model_ids_result = {model.model_id: result for model, result in result.items()}
