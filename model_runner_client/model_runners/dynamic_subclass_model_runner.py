@@ -1,26 +1,31 @@
-from model_runner_client.model_runners.model_runner import ModelRunner
-from model_runner_client.grpc.generated.commons_pb2 import Variant, VariantType, Argument, KwArgument
-from model_runner_client.grpc.generated.dynamic_subclass_pb2 import SetupRequest, SetupResponse, CallRequest, CallResponse
-from model_runner_client.grpc.generated.dynamic_subclass_pb2_grpc import DynamicSubclassServiceStub
-from model_runner_client.utils.datatype_transformer import decode_data
-from model_runner_client.errors import InvalidCoordinatorUsageError
+from typing import Any, Optional, cast
+
+from ..errors import InvalidCoordinatorUsageError
+from ..grpc.generated.commons_pb2 import Argument, KwArgument
+from ..grpc.generated.dynamic_subclass_pb2 import (CallRequest, CallResponse,
+                                                   SetupRequest)
+from ..grpc.generated.dynamic_subclass_pb2_grpc import \
+    DynamicSubclassServiceStub
+from ..model_runners.model_runner import ModelRunner
+from ..utils.datatype_transformer import decode_data
 
 
 class DynamicSubclassModelRunner(ModelRunner):
 
-    def __init__(self,
-                 base_classname: str,
-                 model_id: str,
-                 model_name: str,
-                 ip: str,
-                 port: int,
-                 infos: dict,
-                 instance_args: list[Argument] = None,
-                 instance_kwargs: list[KwArgument] = None,
-                 ):
+    def __init__(
+        self,
+        base_classname: str,
+        model_id: str,
+        model_name: str,
+        ip: str,
+        port: int,
+        infos: dict[str, Any],
+        instance_args: list[Argument] = [],
+        instance_kwargs: list[KwArgument] = [],
+    ):
         """
         Initialize the DynamicSubclassModelRunner.
-    
+
         Args:
             base_classname (str): The base class used to find the model class and instantiate it (Remotely).
                 Please provide the full name with module name, Example: "model_runner_client.model_runners.dynamic_subclass_model_runner.ModelRunner".
@@ -35,11 +40,11 @@ class DynamicSubclassModelRunner(ModelRunner):
         self.instance_args = instance_args
         self.instance_kwargs = instance_kwargs
 
-        self.grpc_stub: DynamicSubclassServiceStub = None
+        self.grpc_stub: Optional[DynamicSubclassServiceStub] = None
 
         super().__init__(model_id, model_name, ip, port, infos)
 
-    async def setup(self, grpc_channel) -> tuple[bool, ModelRunner.ErrorType | None]:
+    async def setup(self, grpc_channel: Any) -> tuple[bool, ModelRunner.ErrorType | None]:
         """
         Asynchronously setup the gRPC stub and initialize the model instance
         with the base class name via the DynamicSubclassServiceStub.
@@ -59,7 +64,7 @@ class DynamicSubclassModelRunner(ModelRunner):
         else:
             return False, self.ErrorType.FAILED
 
-    async def call(self, method_name: str, args: list[Argument] = None, kwargs: list[KwArgument] = None) -> tuple[any, ModelRunner.ErrorType | None]:
+    async def call(self, method_name: str, args: list[Argument] = [], kwargs: list[KwArgument] = []) -> tuple[Any, ModelRunner.ErrorType | None]:
         """
         An asynchronous method for executing a remote procedure call over gRPC using method name,
         arguments, and keyword arguments.
@@ -69,11 +74,12 @@ class DynamicSubclassModelRunner(ModelRunner):
             args (list[Argument]): A list of positional arguments for the remote method.
             kwargs (list[KwArgument]): A list of keyword arguments for the remote method.
         """
+
         if self.grpc_stub is None:
             raise InvalidCoordinatorUsageError("gRPC stub is not initialized, please call setup() first.")
 
         call_request = CallRequest(methodName=method_name, methodArguments=args, methodKwArguments=kwargs)
-        call_response: CallResponse = await self.grpc_stub.Call(call_request)
+        call_response = cast(Optional[CallResponse], await self.grpc_stub.Call(call_request))
         if call_response is None:
             return None, self.ErrorType.FAILED
 

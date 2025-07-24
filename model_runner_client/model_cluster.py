@@ -18,7 +18,7 @@ class ModelCluster:
         :param ws_port: The WebSocket server's port.
         """
         self.crunch_id = crunch_id
-        self.models_run = {}
+        self.models_run: dict[str, ModelRunner] = {}
         logger.debug(f"Initializing ModelCluster with Crunch ID: {crunch_id}")
         self.ws_client = WebsocketClient(ws_host, ws_port, crunch_id, event_handler=self.handle_event)
         self.model_factory = model_factory
