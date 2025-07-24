@@ -1,9 +1,11 @@
+from typing import Any
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, patch
 
-from model_runner_client.model_concurrent_runners.model_concurrent_runner import ModelConcurrentRunner
-from model_runner_client.model_concurrent_runners.model_concurrent_runner import ModelPredictResult
+from model_runner_client.model_concurrent_runners.model_concurrent_runner import (
+    ModelConcurrentRunner, ModelPredictResult)
 from model_runner_client.model_runners.model_runner import ModelRunner
+
 
 class TestModelConcurrentRunner(IsolatedAsyncioTestCase):
     def setUp(self):
@@ -26,8 +28,11 @@ class TestModelConcurrentRunner(IsolatedAsyncioTestCase):
         }
         self.mock_model_cluster.process_failure = AsyncMock()
 
+        class MockModelConcurrentRunner(ModelConcurrentRunner):
+            def create_model_runner(self, model_id: str, model_name: str, ip: str, port: int, infos: dict[str, Any]) -> ModelRunner:
+                raise NotImplementedError()
 
-        self.concurrent_runner = ModelConcurrentRunner(
+        self.concurrent_runner = MockModelConcurrentRunner(
             timeout=10, crunch_id="test-id", host="localhost", port=1234
         )
 
