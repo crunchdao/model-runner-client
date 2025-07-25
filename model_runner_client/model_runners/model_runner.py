@@ -2,30 +2,33 @@ import abc
 import asyncio
 import logging
 from enum import Enum
+from typing import Any
 
 import grpc
 from grpc.aio import AioRpcError
 
-from model_runner_client.errors.errors import InvalidCoordinatorUsageError
+from ..errors import InvalidCoordinatorUsageError
 
 logger = logging.getLogger("model_runner_client.model_runner")
 
 
 class ModelRunner:
+
     class ErrorType(Enum):
         GRPC_CONNECTION_FAILED = "GRPC_CONNECTION_FAILED"
         FAILED = "FAILED"
         BAD_IMPLEMENTATION = "BAD_IMPLEMENTATION"
         ABORTED = "ABORTED"
 
-    def __init__(self,
-                 model_id: str,
-                 model_name: str,
-                 ip: str,
-                 port: int,
-                 infos: dict,
-                 retry_backoff_factor: float = 2):
-
+    def __init__(
+        self,
+        model_id: str,
+        model_name: str,
+        ip: str,
+        port: int,
+        infos: dict[str, Any],
+        retry_backoff_factor: float = 2
+    ):
         self.model_id = model_id
         self.model_name = model_name
         self.ip = ip
@@ -71,7 +74,7 @@ class ModelRunner:
                 last_error = e
 
             if attempt < self.retry_attempts:
-                backoff_time = self.retry_backoff_factor ** attempt # Backoff with exponential delay
+                backoff_time = self.retry_backoff_factor ** attempt  # Backoff with exponential delay
                 logger.warning(f"Retrying in {backoff_time} seconds...")
                 await asyncio.sleep(backoff_time)
             else:
