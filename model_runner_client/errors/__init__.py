@@ -1,1 +1,1 @@
-from .errors import InvalidCoordinatorUsageError
+from .errors import InvalidCoordinatorUsageError as InvalidCoordinatorUsageError
