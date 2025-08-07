@@ -99,6 +99,7 @@ class ModelCluster:
                 elif state == "RUNNING":
                     logger.debug(f"Model with ID {model_id} is already running in the cluster. Updating infos")
                     model_runner.infos = infos
+                    model_runner.model_name = model_name
                 else:
                     logger.warning(f"Model updated: {model_id}, with state: {state} => This state is not handled...")
             else:
