@@ -3,7 +3,6 @@ from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
 import websockets
-from grpc import Status
 
 from model_runner_client.grpc.generated import commons_pb2
 from model_runner_client.grpc.generated.commons_pb2 import Argument, Variant, VariantType
@@ -63,10 +62,10 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
     @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
     @patch('model_runner_client.model_runners.dynamic_subclass_model_runner.DynamicSubclassServiceStub', new_callable=MagicMock)
     async def test_call(self, mock_grpc_sub, mock_insecure_channel):
-        mock_instance = MagicMock()
-        mock_grpc_sub.return_value = mock_instance
 
-        mock_instance.Setup = AsyncMock(return_value=SetupResponse(
+        mock_insecure_channel.return_value.channel_ready = AsyncMock(return_value=True)
+
+        mock_grpc_sub.return_value.Setup = AsyncMock(return_value=SetupResponse(
             status=commons_pb2.Status(code='SUCCESS', message='OK')
         ))
 
@@ -102,7 +101,7 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
         self.assertEqual(2, len(self.instance.model_cluster.models_run))
 
         # here try call to the model
-        mock_instance.Call = AsyncMock(return_value=CallResponse(
+        mock_grpc_sub.return_value.Call = AsyncMock(return_value=CallResponse(
             status=commons_pb2.Status(code='SUCCESS', message='OK'),
             methodResponse=Variant(type=VariantType.STRING, value=b"PREDICTION")
         ))
@@ -126,6 +125,8 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
     @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
     @patch('model_runner_client.model_runners.dynamic_subclass_model_runner.DynamicSubclassServiceStub', new_callable=MagicMock)
     async def test_call_with_error(self, mock_grpc_sub, mock_insecure_channel):
+        mock_insecure_channel.return_value.channel_ready = AsyncMock(return_value=True)
+
         mock_instance = MagicMock()
         mock_grpc_sub.return_value = mock_instance
 
@@ -175,6 +176,8 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
     @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
     @patch('model_runner_client.model_runners.dynamic_subclass_model_runner.DynamicSubclassServiceStub', new_callable=MagicMock)
     async def test_update_infos(self, mock_grpc_sub, mock_insecure_channel):
+        mock_insecure_channel.return_value.channel_ready = AsyncMock(return_value=True)
+
         mock_instance = MagicMock()
         mock_grpc_sub.return_value = mock_instance
 

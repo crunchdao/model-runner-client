@@ -118,6 +118,7 @@ class ModelCluster:
         """
         Asynchronously initialize a model_runner and add it to the cluster state.
         """
+        logger.debug(f"adding model runner:{model_runner}")
         is_initialized, error = await model_runner.init()
         if is_initialized:
             self.models_run[model_runner.model_id] = model_runner
@@ -154,11 +155,27 @@ class ModelCluster:
         if model_runner.model_id in self.models_run:
             del self.models_run[model_runner.model_id]
 
-    async def start(self):
-        """
-        Start the WebSocket client and handle events.
-        """
+    async def reconnect_model_runner(self, model_runner: ModelRunner):
         try:
-            await self.ws_client.connect()
+            logger.debug(f"Reconnecting model with ID: {model_runner.model_id}, first we disconnect it...")
+            await self.remove_model_runner(model_runner)
+            model_runner = self.model_factory(
+                model_runner.model_id,
+                model_runner.model_name,
+                model_runner.ip,
+                model_runner.port,
+                model_runner.infos
+            )
+            await self.add_model_runner(model_runner)
         except Exception as e:
-            logger.error(f"Failed to start WebSocket client: {e}", exc_info=True)
+            logger.error(f"Error reconnecting model with ID: {model_runner.model_id}: {e}", exc_info=True)
+
+
+async def start(self):
+    """
+    Start the WebSocket client and handle events.
+    """
+    try:
+        await self.ws_client.connect()
+    except Exception as e:
+        logger.error(f"Failed to start WebSocket client: {e}", exc_info=True)
