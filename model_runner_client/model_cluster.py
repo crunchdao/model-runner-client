@@ -159,7 +159,7 @@ class ModelCluster:
         try:
             logger.debug(f"Reconnecting model with ID: {model_runner.model_id}, first we disconnect it...")
             await self.remove_model_runner(model_runner)
-            model_runner = model_runner = self.model_factory(
+            model_runner = self.model_factory(
                 model_runner.model_id,
                 model_runner.model_name,
                 model_runner.ip,
