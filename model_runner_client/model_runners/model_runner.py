@@ -49,12 +49,27 @@ class ModelRunner:
         pass
 
     async def init(self) -> tuple[bool, ErrorType | None]:
+        options = [
+            # Very fast reconnection
+            ("grpc.initial_reconnect_backoff_ms", 100),  # 100 ms on the first attempt
+            ("grpc.min_reconnect_backoff_ms", 100),  # minimum 100 ms
+            ("grpc.max_reconnect_backoff_ms", 1000),  # maximum 1 second (avoids excessive hammering)
+
+          #  ("grpc.http2.min_time_between_pings_ms", 1000),
+          #  ("grpc.http2.max_pings_without_data", 0),
+            ("grpc.keepalive_time_ms", 300000),  # ping every 5 minutes
+            ("grpc.keepalive_timeout_ms", 500),  # wait 500ms for ACK
+            ("grpc.keepalive_permit_without_calls", 1),
+        ]
+
+        grpc_setup_timeout = 10 # 10s
         for attempt in range(1, self.retry_attempts + 1):
             if self.closed:
                 logger.debug(f"Model runner {self.model_id} closed, aborting initialization")
                 return False, self.ErrorType.ABORTED
             try:
-                self.grpc_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}")
+                self.grpc_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", options)
+                await asyncio.wait_for(self.grpc_channel.channel_ready(), timeout=grpc_setup_timeout)
                 # todo what happen is this take long time, need to add timeout ????
                 setup_succeed, error = await self.setup(self.grpc_channel)
                 if setup_succeed:

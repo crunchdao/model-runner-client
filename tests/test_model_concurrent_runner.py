@@ -1,6 +1,9 @@
 from typing import Any
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
+
+import grpc
+from grpc_health.v1 import health_pb2
 
 from model_runner_client.model_concurrent_runners.model_concurrent_runner import (
     ModelConcurrentRunner, ModelPredictResult)
@@ -27,6 +30,7 @@ class TestModelConcurrentRunner(IsolatedAsyncioTestCase):
             "mock_model_2": self.model_runner_2,
         }
         self.mock_model_cluster.process_failure = AsyncMock()
+        self.mock_model_cluster.reconnect_model_runner = AsyncMock()
 
         class MockModelConcurrentRunner(ModelConcurrentRunner):
             def create_model_runner(self, model_id: str, model_name: str, ip: str, port: int, infos: dict[str, Any]) -> ModelRunner:
@@ -58,7 +62,9 @@ class TestModelConcurrentRunner(IsolatedAsyncioTestCase):
         self.assertEqual(results[self.model_runner_1].status, ModelPredictResult.Status.SUCCESS)
         self.assertEqual(results[self.model_runner_2].status, ModelPredictResult.Status.FAILED)
 
-    async def test_execute_concurrent_method_timeout(self):
+    @patch('grpc_health.v1.health_pb2_grpc.HealthStub', new_callable=MagicMock)
+    async def test_execute_concurrent_method_timeout(self, mock_grpc_health: MagicMock):
+        mock_grpc_health.return_value.Check = AsyncMock(return_value=health_pb2.HealthCheckResponse(status=health_pb2.HealthCheckResponse.SERVING))
         self.model_runner_2.test_method = AsyncMock(side_effect=TimeoutError)
 
         results = await self.concurrent_runner._execute_concurrent_method("test_method")
@@ -67,6 +73,33 @@ class TestModelConcurrentRunner(IsolatedAsyncioTestCase):
         self.assertIsNone(results[self.model_runner_2].result)
         self.assertEqual(results[self.model_runner_1].status, ModelPredictResult.Status.SUCCESS)
         self.assertEqual(results[self.model_runner_2].status, ModelPredictResult.Status.TIMEOUT)
+        self.assertEqual(self.model_runner_2.consecutive_timeouts, 1)
+
+    @patch('grpc_health.v1.health_pb2_grpc.HealthStub', new_callable=MagicMock)
+    async def test_execute_concurrent_method_timeout_reconnect(self, mock_grpc_health: MagicMock):
+        mock_grpc_health.return_value.Check = AsyncMock(side_effect=grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, None, "Service Unavailable"))
+        self.model_runner_2.test_method = AsyncMock(side_effect=TimeoutError)
+
+        results = await self.concurrent_runner._execute_concurrent_method("test_method")
+
+        self.assertEqual(results[self.model_runner_1].result, "mock_result_1")
+        self.assertIsNone(results[self.model_runner_2].result)
+        self.assertEqual(results[self.model_runner_1].status, ModelPredictResult.Status.SUCCESS)
+        self.assertEqual(results[self.model_runner_2].status, ModelPredictResult.Status.TIMEOUT)
+        self.mock_model_cluster.reconnect_model_runner.assert_called_once()
+        self.assertEqual(self.model_runner_2.consecutive_timeouts, 0)
+
+
+    async def test_execute_concurrent_method_timeout_busy(self):
+        self.model_runner_2.test_method = AsyncMock(side_effect=grpc.aio.AioRpcError(grpc.StatusCode.RESOURCE_EXHAUSTED, None, "Resource Exhausted"))
+
+        results = await self.concurrent_runner._execute_concurrent_method("test_method")
+
+        self.assertEqual(results[self.model_runner_1].result, "mock_result_1")
+        self.assertIsNone(results[self.model_runner_2].result)
+        self.assertEqual(results[self.model_runner_1].status, ModelPredictResult.Status.SUCCESS)
+        self.assertEqual(results[self.model_runner_2].status, ModelPredictResult.Status.TIMEOUT)
+        self.assertEqual(self.model_runner_2.consecutive_timeouts, 0)
 
     async def test_execute_concurrent_method_multiple_failure(self):
         self.model_runner_2.test_method = AsyncMock(return_value=(None, ModelRunner.ErrorType.FAILED))
@@ -80,7 +113,10 @@ class TestModelConcurrentRunner(IsolatedAsyncioTestCase):
         self.assertEqual(results[self.model_runner_1].status, ModelPredictResult.Status.SUCCESS)
         self.assertEqual(results[self.model_runner_2].status, ModelPredictResult.Status.FAILED)
 
-    async def test_execute_concurrent_method_multiple_timeout(self):
+    @patch('grpc_health.v1.health_pb2_grpc.HealthStub', new_callable=MagicMock)
+    async def test_execute_concurrent_method_multiple_timeout(self, mock_grpc_health: MagicMock):
+        mock_grpc_health.return_value.Check = AsyncMock(return_value=health_pb2.HealthCheckResponse(status=health_pb2.HealthCheckResponse.SERVING))
+
         self.model_runner_2.test_method = AsyncMock(side_effect=TimeoutError)
 
         for i in range(ModelConcurrentRunner.MAX_CONSECUTIVE_TIMEOUTS + 1):

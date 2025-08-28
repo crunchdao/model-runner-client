@@ -74,6 +74,7 @@ class DynamicSubclassModelRunner(ModelRunner):
         self,
         method_name: str,
         arguments: ArgumentsType = ([], []),
+        timeout: int | None = None
     ) -> tuple[Any, ModelRunner.ErrorType | None]:
         """
         An asynchronous method for executing a remote procedure call over gRPC using method name,
@@ -94,7 +95,7 @@ class DynamicSubclassModelRunner(ModelRunner):
             raise InvalidCoordinatorUsageError("gRPC stub is not initialized, please call setup() first.")
 
         call_request = CallRequest(methodName=method_name, methodArguments=args, methodKwArguments=kwargs)
-        call_response = cast(Optional[CallResponse], await self.grpc_stub.Call(call_request))
+        call_response = cast(Optional[CallResponse], await self.grpc_stub.Call(call_request, timeout=timeout, wait_for_ready=True))
         if call_response is None:
             return None, self.ErrorType.FAILED
 

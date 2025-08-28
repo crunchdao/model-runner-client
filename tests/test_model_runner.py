@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import ANY
 
 import pytest
 from grpc.aio import AioRpcError
@@ -17,11 +17,12 @@ class TestModelRunner(IsolatedAsyncioTestCase):
 
     @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
     async def test_init_successful(self, mock_insecure_channel):
+        mock_insecure_channel.return_value.channel_ready = AsyncMock(return_value=False)
         success, error = await self.runner.init()
 
         self.assertTrue(success)
         self.assertIsNone(error)
-        mock_insecure_channel.assert_called_once_with("127.0.0.1:5000")
+        mock_insecure_channel.assert_called_once_with("127.0.0.1:5000", ANY)
         self.runner.setup.assert_called_once()
 
     @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
@@ -63,6 +64,7 @@ class TestModelRunner(IsolatedAsyncioTestCase):
 
     @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
     async def test_init_invalid_coordinator_usage_error(self, mock_insecure_channel):
+        mock_insecure_channel.return_value.channel_ready = AsyncMock(return_value=False)
         self.runner.setup = AsyncMock(side_effect=InvalidCoordinatorUsageError)
 
         with self.assertRaises(InvalidCoordinatorUsageError):
@@ -70,6 +72,7 @@ class TestModelRunner(IsolatedAsyncioTestCase):
 
     @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
     async def test_init_invalid_coordinator_error(self, mock_insecure_channel):
+        mock_insecure_channel.return_value.channel_ready = AsyncMock(return_value=False)
         self.runner.setup = AsyncMock(return_value=(False, ModelRunner.ErrorType.BAD_IMPLEMENTATION))
 
         success, error = await self.runner.init()

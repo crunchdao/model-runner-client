@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from grpc import StatusCode
 from grpc.aio import AioRpcError
+from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 from ..model_cluster import ModelCluster
 from ..model_runners.model_runner import ModelRunner
@@ -42,6 +44,7 @@ class ModelConcurrentRunner(ABC):
 
     MAX_CONSECUTIVE_FAILURES = 3
     MAX_CONSECUTIVE_TIMEOUTS = 3
+    HEALTH_TIMEOUT_S = 1  # short health check deadline
 
     def __init__(
         self,
@@ -125,7 +128,7 @@ class ModelConcurrentRunner(ABC):
             method = getattr(model, method_name)
 
             try:
-                result, error = await asyncio.wait_for(method(*args, **kwargs), timeout=self.timeout)
+                result, error = await method(*args, **kwargs, timeout=self.timeout)
             except ValueError:  # decode error
                 error = ModelRunner.ErrorType.FAILED
             
@@ -147,11 +150,38 @@ class ModelConcurrentRunner(ABC):
 
             return ModelPredictResult.of_failed(model)
 
-        except (asyncio.TimeoutError, AioRpcError):
-            model.register_timeout()
+        except (asyncio.TimeoutError, AioRpcError) as e:
+            logger.debug(f"Method {method_name} on model {model.model_id} timed out after {self.timeout} seconds.", exc_info=True)
+
+            # 1) Busy case: RESOURCE_EXHAUSTED means the server rejected because it's running another call (basically the last call who timeout)
+            if isinstance(e, AioRpcError) and e.code() == StatusCode.RESOURCE_EXHAUSTED:
+                logger.debug(f"The model runner {model.model_id} is busy (RESOURCE_EXHAUSTED). No penalty is applied while it recovers")
+                return ModelPredictResult.of_timeout(model)  # neutral, no penalty
+
+            # 2) Health check
+            health_serving = False
+            try:
+                hstub = health_pb2_grpc.HealthStub(model.grpc_channel)
+                resp = await hstub.Check(
+                    health_pb2.HealthCheckRequest(service=""),
+                    timeout=self.HEALTH_TIMEOUT_S,
+                    wait_for_ready=False
+                )
+                health_serving = (resp.status == health_pb2.HealthCheckResponse.SERVING)
+            except Exception as he:
+                logger.debug(f"Health check failed for model {model.model_id}: {he}")
+
+            # 3) Decision: penalize vs reconnect
+            if health_serving:
+                # Application timeout while service is SERVING => penalize
+                model.register_timeout()
+            else:
+                # Health failed or NOT_SERVING => reconnect
+                logger.debug(f"Health not SERVING for model {model.model_id}; scheduling reconnect.")
+                asyncio.create_task(self.model_cluster.reconnect_model_runner(model))
+
 
             if self.max_consecutive_timeout and model.consecutive_timeouts > self.max_consecutive_timeout:
-                # TODO(Abdennour), don't this need to be awaited?
                 asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_TIMEOUT'))
 
             return ModelPredictResult.of_timeout(model)
