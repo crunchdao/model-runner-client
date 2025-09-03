@@ -151,7 +151,7 @@ class ModelConcurrentRunner(ABC):
             return ModelPredictResult.of_failed(model)
 
         except (asyncio.TimeoutError, AioRpcError) as e:
-            logger.debug(f"Method {method_name} on model {model.model_id} timed out after {self.timeout} seconds.", exc_info=True)
+            logger.warning(f"Method {method_name} on model {model.model_id}, {model.model_name} timed out after {self.timeout} seconds.", exc_info=True)
 
             # 1) Busy case: RESOURCE_EXHAUSTED means the server rejected because it's running another call (basically the last call who timeout)
             if isinstance(e, AioRpcError) and e.code() == StatusCode.RESOURCE_EXHAUSTED:
@@ -169,7 +169,7 @@ class ModelConcurrentRunner(ABC):
                 )
                 health_serving = (resp.status == health_pb2.HealthCheckResponse.SERVING)
             except Exception as he:
-                logger.debug(f"Health check failed for model {model.model_id}: {he}")
+                logger.warning(f"Health check failed for model {model.model_id}, {model.model_name}: {he}")
 
             # 3) Decision: penalize vs reconnect
             if health_serving:
