@@ -26,25 +26,25 @@ class ModelPredictResult:
     model_runner: ModelRunner
     result: Any
     status: Status
+    exec_time_us: int
 
     @staticmethod
-    def of_success(model_runner: ModelRunner, result: Any) -> 'ModelPredictResult':
-        return ModelPredictResult(model_runner, result, ModelPredictResult.Status.SUCCESS)
+    def of_success(model_runner: ModelRunner, result: Any, exec_time: int) -> 'ModelPredictResult':
+        return ModelPredictResult(model_runner, result, ModelPredictResult.Status.SUCCESS, exec_time)
 
     @staticmethod
-    def of_failed(model_runner: ModelRunner) -> 'ModelPredictResult':
-        return ModelPredictResult(model_runner, None, ModelPredictResult.Status.FAILED)
+    def of_failed(model_runner: ModelRunner, exec_time: int) -> 'ModelPredictResult':
+        return ModelPredictResult(model_runner, None, ModelPredictResult.Status.FAILED, exec_time)
 
     @staticmethod
-    def of_timeout(model_runner: ModelRunner) -> 'ModelPredictResult':
-        return ModelPredictResult(model_runner, None, ModelPredictResult.Status.TIMEOUT)
+    def of_timeout(model_runner: ModelRunner, exec_time: int) -> 'ModelPredictResult':
+        return ModelPredictResult(model_runner, None, ModelPredictResult.Status.TIMEOUT, exec_time)
 
 
 class ModelConcurrentRunner(ABC):
 
     MAX_CONSECUTIVE_FAILURES = 3
     MAX_CONSECUTIVE_TIMEOUTS = 3
-    HEALTH_TIMEOUT_S = 1  # short health check deadline
 
     def __init__(
         self,
@@ -124,19 +124,24 @@ class ModelConcurrentRunner(ABC):
         *args: tuple[Any],
         **kwargs: dict[str, Any],
     ) -> ModelPredictResult:
+
+        start_time = asyncio.get_event_loop().time()
+        exec_time_f = lambda: int((asyncio.get_event_loop().time() - start_time) * 1_000_000)
+
         try:
             method = getattr(model, method_name)
-
             try:
                 result, error = await method(*args, **kwargs, timeout=self.timeout)
             except ValueError:  # decode error
                 error = ModelRunner.ErrorType.FAILED
-            
+
+            exec_time = exec_time_f()
+
             if not error:
                 model.reset_failures()
                 model.reset_timeouts()
 
-                return ModelPredictResult.of_success(model, result)
+                return ModelPredictResult.of_success(model, result, exec_time)
 
             if error == ModelRunner.ErrorType.BAD_IMPLEMENTATION:
                 # TODO(Abdennour), don't this need to be awaited?
@@ -148,15 +153,17 @@ class ModelConcurrentRunner(ABC):
                     # TODO(Abdennour), don't this need to be awaited?
                     asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_FAILED'))
 
-            return ModelPredictResult.of_failed(model)
+            return ModelPredictResult.of_failed(model, exec_time)
 
         except (asyncio.TimeoutError, AioRpcError) as e:
+            exec_time = exec_time_f()
+
             logger.warning(f"Method {method_name} on model {model.model_id}, {model.model_name} timed out after {self.timeout} seconds.", exc_info=True)
 
             # 1) Busy case: RESOURCE_EXHAUSTED means the server rejected because it's running another call (basically the last call who timeout)
             if isinstance(e, AioRpcError) and e.code() == StatusCode.RESOURCE_EXHAUSTED:
                 logger.debug(f"The model runner {model.model_id} is busy (RESOURCE_EXHAUSTED). No penalty is applied while it recovers")
-                return ModelPredictResult.of_timeout(model)  # neutral, no penalty
+                return ModelPredictResult.of_timeout(model, exec_time)  # neutral, no penalty
 
             # 2) Health check
             health_serving = False
@@ -164,7 +171,7 @@ class ModelConcurrentRunner(ABC):
                 hstub = health_pb2_grpc.HealthStub(model.grpc_channel)
                 resp = await hstub.Check(
                     health_pb2.HealthCheckRequest(service=""),
-                    timeout=self.HEALTH_TIMEOUT_S,
+                    timeout=self.timeout,
                     wait_for_ready=False
                 )
                 health_serving = (resp.status == health_pb2.HealthCheckResponse.SERVING)
@@ -184,7 +191,7 @@ class ModelConcurrentRunner(ABC):
             if self.max_consecutive_timeout and model.consecutive_timeouts > self.max_consecutive_timeout:
                 asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_TIMEOUT'))
 
-            return ModelPredictResult.of_timeout(model)
+            return ModelPredictResult.of_timeout(model, exec_time)
 
         except Exception:
             logger.error(f"Unexpected error during concurrent execution of method {method_name} on model {model.model_id}", exc_info=True)

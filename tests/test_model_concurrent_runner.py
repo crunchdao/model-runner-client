@@ -73,6 +73,7 @@ class TestModelConcurrentRunner(IsolatedAsyncioTestCase):
         self.assertIsNone(results[self.model_runner_2].result)
         self.assertEqual(results[self.model_runner_1].status, ModelPredictResult.Status.SUCCESS)
         self.assertEqual(results[self.model_runner_2].status, ModelPredictResult.Status.TIMEOUT)
+        self.assertGreater(results[self.model_runner_2].exec_time_us, 0)
         self.assertEqual(self.model_runner_2.consecutive_timeouts, 1)
 
     @patch('grpc_health.v1.health_pb2_grpc.HealthStub', new_callable=MagicMock)
