@@ -119,6 +119,7 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
         self.assertIn("test_id_1", model_ids_result.keys())
         self.assertIn("test_id_2", model_ids_result.keys())
         self.assertEqual(ModelPredictResult.Status.SUCCESS, model_ids_result["test_id_1"].status)
+        self.assertGreater(model_ids_result["test_id_1"].exec_time_us, 0)
         self.assertEqual("PREDICTION", model_ids_result["test_id_1"].result)
         self.assertEqual(ModelPredictResult.Status.SUCCESS, model_ids_result["test_id_2"].status)
 
