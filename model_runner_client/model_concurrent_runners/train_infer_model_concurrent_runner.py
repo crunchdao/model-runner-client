@@ -29,11 +29,11 @@ class TrainInferModelConcurrentRunner(ModelConcurrentRunner):
         """
         super().__init__(timeout, crunch_id, host, port)
 
-    def create_model_runner(self, model_id: str, model_name: str, ip: str, port: int, infos: dict) -> ModelRunner:
+    def create_model_runner(self, deployment_id:str, model_id: str, model_name: str, ip: str, port: int, infos: dict) -> ModelRunner:
         """
         Factory method to create an instance of TrainInferModelRunner.
         """
-        return TrainInferModelRunner(model_id, model_name, ip, port, infos)
+        return TrainInferModelRunner(deployment_id, model_id, model_name, ip, port, infos)
 
     async def predict(self, argument_type: VariantType, argument_value) -> dict[ModelRunner, ModelPredictResult]:
         """

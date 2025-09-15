@@ -13,6 +13,7 @@ logger = logging.getLogger("model_runner_client.TrainInferModelRunner")
 
 class TrainInferModelRunner(ModelRunner):
     def __init__(self,
+                 deployment_id: str,
                  model_id: str,
                  model_name: str,
                  ip: str,
@@ -29,7 +30,7 @@ class TrainInferModelRunner(ModelRunner):
         """
 
         self.grpc_stub = None
-        super().__init__(model_id, model_name, ip, port, infos)
+        super().__init__(deployment_id, model_id, model_name, ip, port, infos)
 
     async def setup(self, grpc_channel):
         self.grpc_stub = TrainInferServiceStub(self.grpc_channel)

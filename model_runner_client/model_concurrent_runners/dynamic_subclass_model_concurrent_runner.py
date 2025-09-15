@@ -51,6 +51,7 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
 
     def create_model_runner(
         self,
+        deployment_id: str,
         model_id: str,
         model_name: str,
         ip: str,
@@ -59,6 +60,7 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
     ) -> DynamicSubclassModelRunner:
         return DynamicSubclassModelRunner(
             self.base_classname,
+            deployment_id,
             model_id,
             model_name,
             ip,

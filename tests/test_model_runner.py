@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 class TestModelRunner(IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.runner = ModelRunner(model_id="test_id", model_name="test_name", ip="127.0.0.1", port=5000, infos={})
+        self.runner = ModelRunner(deployment_id="deployment_id_1", model_id="test_id", model_name="test_name", ip="127.0.0.1", port=5000, infos={})
         self.runner.setup = AsyncMock(return_value=(True, None))
         self.runner.retry_backoff_factor = 0
 

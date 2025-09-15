@@ -76,6 +76,7 @@ class ModelConcurrentRunner(ABC):
     @abstractmethod
     def create_model_runner(
         self,
+        deployment_id: str,
         model_id: str,
         model_name: str,
         ip: str,
