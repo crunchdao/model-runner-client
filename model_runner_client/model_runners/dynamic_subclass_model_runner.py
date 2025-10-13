@@ -21,6 +21,7 @@ class DynamicSubclassModelRunner(ModelRunner):
     def __init__(
         self,
         base_classname: str,
+        deployment_id: str,
         model_id: str,
         model_name: str,
         ip: str,
@@ -48,7 +49,7 @@ class DynamicSubclassModelRunner(ModelRunner):
 
         self.grpc_stub: Optional[DynamicSubclassServiceStub] = None
 
-        super().__init__(model_id, model_name, ip, port, infos)
+        super().__init__(deployment_id, model_id, model_name, ip, port, infos)
 
     async def setup(self, grpc_channel: Any) -> tuple[bool, ModelRunner.ErrorType | None]:
         """

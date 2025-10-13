@@ -80,6 +80,7 @@ class ModelCluster:
     async def update_model_runs(self, data):
         tasks = []
         for model_update in data:
+            deployment_id = model_update.get("deployment_id")
             model_id = model_update.get("model_id")
             infos = model_update.get("infos")
             model_name = infos.get("model_name") if infos else None
@@ -90,6 +91,10 @@ class ModelCluster:
 
             # Find the model in the current state
             model_runner = self.models_run.get(model_id)
+            if model_runner and deployment_id != model_runner.deployment_id:
+                logger.debug(f"Model with ID {model_id} is already running in the cluster, but its deployment ID is different {deployment_id}<>{model_runner.deployment_id}. Certainly a state change of the previous/new deployment")
+                model_runner = None
+
 
             if model_runner:
                 if state == "STOPPED":
@@ -104,10 +109,10 @@ class ModelCluster:
                     logger.warning(f"Model updated: {model_id}, with state: {state} => This state is not handled...")
             else:
                 if state == "STOPPED":
-                    logger.debug(f"Model with ID {model_id} is not found in the cluster state, and its state is 'STOPPED'. No action is required.")
+                    logger.debug(f"Model with ID {model_id}  and deployment ID {deployment_id} is not found in the cluster state, and its state is 'STOPPED'. No action is required.")
                 elif state == "RUNNING":
                     logger.debug(f"New model with ID {model_id} is running, we add it to the cluster state.")
-                    model_runner = self.model_factory(model_id, model_name, ip, port, infos)
+                    model_runner = self.model_factory(deployment_id, model_id, model_name, ip, port, infos)
                     tasks.append(self.add_model_runner(model_runner))
                 else:
                     logger.warning(f"Model updated: {model_id}, with state: {state} => This state is not handled...")
@@ -119,6 +124,14 @@ class ModelCluster:
         Asynchronously initialize a model_runner and add it to the cluster state.
         """
         logger.debug(f"adding model runner:{model_runner}")
+
+        # This should never happen since the model orchestrator sends STOP for the previous one
+        # before sending RUNNING for the new one. But just in case, close the connection with the old one.
+        if model_runner.model_id in self.models_run:
+            logger.debug(f"Model with ID: {model_runner.model_id} already exists in the cluster state. Removing it...")
+            await self.remove_model_runner(model_runner)
+
+
         is_initialized, error = await model_runner.init()
         if is_initialized:
             self.models_run[model_runner.model_id] = model_runner
@@ -160,6 +173,7 @@ class ModelCluster:
             logger.debug(f"Reconnecting model with ID: {model_runner.model_id}, first we disconnect it...")
             await self.remove_model_runner(model_runner)
             model_runner = self.model_factory(
+                model_runner.deployment_id,
                 model_runner.model_id,
                 model_runner.model_name,
                 model_runner.ip,

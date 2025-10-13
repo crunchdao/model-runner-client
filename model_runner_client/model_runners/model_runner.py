@@ -22,6 +22,7 @@ class ModelRunner:
 
     def __init__(
         self,
+        deployment_id: str,
         model_id: str,
         model_name: str,
         ip: str,
@@ -29,6 +30,7 @@ class ModelRunner:
         infos: dict[str, Any],
         retry_backoff_factor: float = 2
     ):
+        self.deployment_id = deployment_id
         self.model_id = model_id
         self.model_name = model_name
         self.ip = ip

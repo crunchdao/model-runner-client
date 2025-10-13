@@ -12,8 +12,8 @@ from model_runner_client.model_concurrent_runners.model_concurrent_runner import
 from model_runner_client.model_runners.dynamic_subclass_model_runner import DynamicSubclassModelRunner
 
 
-def create_model_runner(model_id, model_name, ip, port, infos):
-    model_runner = DynamicSubclassModelRunner('birdgame.trackers.trackerbase.TrackerBase', model_id, model_name, ip, port, infos)
+def create_model_runner(deployement_id, model_id, model_name, ip, port, infos):
+    model_runner = DynamicSubclassModelRunner('birdgame.trackers.trackerbase.TrackerBase', deployement_id, model_id, model_name, ip, port, infos)
     return model_runner
 
 
@@ -26,6 +26,7 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
             "event": "init", "data":
                 [
                     {
+                        "deployment_id": "deployment_id_1",
                         "model_id": "test_id_1",
                         "model_name": "test_name",
                         "state": "RUNNING",
@@ -83,6 +84,7 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
             "event": "update", "data":
                 [
                     {
+                        "deployment_id": "deployment_id_2",
                         "model_id": "test_id_2",
                         "model_name": "test_name",
                         "state": "RUNNING",
@@ -201,6 +203,7 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
             "event": "update", "data":
                 [
                     {
+                        "deployment_id": "deployment_id_1",
                         "model_id": "test_id_1",
                         "model_name": "test_name",
                         "state": "RUNNING",
