@@ -123,12 +123,12 @@ class ModelCluster:
         """
         Asynchronously initialize a model_runner and add it to the cluster state.
         """
-        logger.debug(f"adding model runner:{model_runner}")
+        logger.info(f"Adding model runner ID:{model_runner.model_id}, deployment ID:{model_runner.deployment_id} to the cluster state")
 
         # This should never happen since the model orchestrator sends STOP for the previous one
         # before sending RUNNING for the new one. But just in case, close the connection with the old one.
         if model_runner.model_id in self.models_run:
-            logger.debug(f"Model with ID: {model_runner.model_id} already exists in the cluster state. Removing it...")
+            logger.warning(f"A model with ID {model_runner.model_id}, deployment ID {model_runner.deployment_id} is already running in the cluster. Closing connection with the old one.")
             await self.remove_model_runner(model_runner)
 
 
@@ -164,13 +164,15 @@ class ModelCluster:
         """
         Asynchronously initialize a model_runner and add it to the cluster state.
         """
+        logger.info(f"Removing model runner ID:{model_runner.model_id}, deployment ID:{model_runner.deployment_id} from the cluster state")
         await model_runner.close()
         if model_runner.model_id in self.models_run:
             del self.models_run[model_runner.model_id]
+        logger.info(f"Model runner ID:{model_runner.model_id} with deployment ID:{model_runner.deployment_id} removed from the cluster state")
 
     async def reconnect_model_runner(self, model_runner: ModelRunner):
         try:
-            logger.debug(f"Reconnecting model with ID: {model_runner.model_id}, first we disconnect it...")
+            logger.info(f"Reconnecting model with ID: {model_runner.model_id}, first we disconnect it...")
             await self.remove_model_runner(model_runner)
             model_runner = self.model_factory(
                 model_runner.deployment_id,
