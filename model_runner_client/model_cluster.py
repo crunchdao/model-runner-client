@@ -125,11 +125,13 @@ class ModelCluster:
         """
         logger.info(f"Adding model runner ID:{model_runner.model_id}, deployment ID:{model_runner.deployment_id} to the cluster state")
 
-        # This should never happen since the model orchestrator sends STOP for the previous one
-        # before sending RUNNING for the new one. But just in case, close the connection with the old one.
-        if model_runner.model_id in self.models_run:
-            logger.warning(f"A model with ID {model_runner.model_id}, deployment ID {model_runner.deployment_id} is already running in the cluster. Closing connection with the old one.")
-            await self.remove_model_runner(model_runner)
+        # To handle scenarios where the model orchestrator sends a RUNNING state for a new model
+        # before sending a STOP state for a previous deployment of the same model ID,
+        # we first ensure the existing model runner is properly stopped and cleaned up
+        # to prevent conflicts or resource issues in the cluster state.
+        if current_model := self.models_run.get(model_runner.model_id):
+            logger.info(f"A model with ID {current_model.model_id}, deployment ID {current_model.deployment_id} is already running in the cluster. Closing connection with the old one.")
+            await self.remove_model_runner(current_model)
 
 
         is_initialized, error = await model_runner.init()
