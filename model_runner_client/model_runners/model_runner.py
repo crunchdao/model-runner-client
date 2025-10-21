@@ -61,7 +61,7 @@ class ModelRunner:
           #  ("grpc.http2.max_pings_without_data", 0),
             ("grpc.keepalive_time_ms", 300000),  # ping every 5 minutes
             ("grpc.keepalive_timeout_ms", 500),  # wait 500ms for ACK
-            ("grpc.keepalive_permit_without_calls", 1),
+            ("grpc.keepalive_permit_without_calls", 0),
         ]
 
         grpc_setup_timeout = 10 # 10s
