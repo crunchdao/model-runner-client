@@ -159,7 +159,7 @@ class ModelConcurrentRunner(ABC):
         except (asyncio.TimeoutError, AioRpcError) as e:
             exec_time = exec_time_f()
 
-            logger.warning(f"Method {method_name} on model {model.model_id}, {model.model_name} timed out after {self.timeout} seconds.", exc_info=True)
+            logger.debug(f"Method {method_name} on model {model.model_id}, {model.model_name} timed out after {self.timeout} seconds.", exc_info=True)
 
             # 1) Busy case: RESOURCE_EXHAUSTED means the server rejected because it's running another call (basically the last call who timeout)
             if isinstance(e, AioRpcError) and e.code() == StatusCode.RESOURCE_EXHAUSTED:
