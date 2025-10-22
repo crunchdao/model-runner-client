@@ -17,7 +17,6 @@ logger = logging.getLogger("model_runner_client")
 
 @dataclass
 class ModelPredictResult:
-
     class Status(Enum):
         SUCCESS = "SUCCESS"
         FAILED = "FAILED"
@@ -42,7 +41,24 @@ class ModelPredictResult:
 
 
 class ModelConcurrentRunner(ABC):
+    """
+        Each model is monitored to ensure it remains responsive and stable.
+        Two counters are tracked internally:
+            •	Failures — when a model returns an error
+            •	Timeouts — when a model takes too long to respond
 
+        When a model times out several times in a row, the system automatically pauses it for a few prediction cycles.
+        The more timeouts occur, the longer the pause becomes — this gives the model time to recover before being queried again.
+
+        Every 20% of its allowed timeout limit, the model also performs a health check over a separate connection.
+            •	If it reports as healthy (SERVING), it remains active but receives a small penalty.
+            •	If it reports as unhealthy or fails the check, the system reconnects it automatically.
+
+        Once it responds successfully again, all penalties are cleared and it resumes normal operation.
+
+
+        If a model continues to fail or exceed its timeout limit, it’s marked as faulty and stopped.
+    """
     MAX_CONSECUTIVE_FAILURES = 3
     MAX_CONSECUTIVE_TIMEOUTS = 3
 
@@ -62,6 +78,8 @@ class ModelConcurrentRunner(ABC):
 
         self.max_consecutive_failures = max_consecutive_failures
         self.max_consecutive_timeout = max_consecutive_timeouts
+
+        self.health_check_threshold = max(1, int(self.max_consecutive_timeout * 0.2))
 
         # TODO: Implement this. If the option is enabled, allow the model time to recover after a timeout.
         # self.enable_recovery_mode
@@ -131,6 +149,10 @@ class ModelConcurrentRunner(ABC):
 
         try:
             method = getattr(model, method_name)
+
+            if model.should_skip_for_timeout_reason():
+                raise asyncio.TimeoutError()
+
             try:
                 result, error = await method(*args, **kwargs, timeout=self.timeout)
             except ValueError:  # decode error
@@ -145,13 +167,11 @@ class ModelConcurrentRunner(ABC):
                 return ModelPredictResult.of_success(model, result, exec_time)
 
             if error == ModelRunner.ErrorType.BAD_IMPLEMENTATION:
-                # TODO(Abdennour), don't this need to be awaited?
                 asyncio.create_task(self.model_cluster.process_failure(model, 'BAD_IMPLEMENTATION'))  # the model will be stopped
             else:
                 model.register_failure()
 
                 if self.max_consecutive_failures and model.consecutive_failures > self.max_consecutive_failures:
-                    # TODO(Abdennour), don't this need to be awaited?
                     asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_FAILED'))
 
             return ModelPredictResult.of_failed(model, exec_time)
@@ -161,25 +181,25 @@ class ModelConcurrentRunner(ABC):
 
             logger.debug(f"Method {method_name} on model {model.model_id}, {model.model_name} timed out after {self.timeout} seconds.", exc_info=True)
 
-            # 1) Busy case: RESOURCE_EXHAUSTED means the server rejected because it's running another call (basically the last call who timeout)
-            if isinstance(e, AioRpcError) and e.code() == StatusCode.RESOURCE_EXHAUSTED:
-                logger.debug(f"The model runner {model.model_id} is busy (RESOURCE_EXHAUSTED). No penalty is applied while it recovers")
-                return ModelPredictResult.of_timeout(model, exec_time)  # neutral, no penalty
+            if not (isinstance(e, AioRpcError) and (e.code() == StatusCode.RESOURCE_EXHAUSTED or e.code() == StatusCode.DEADLINE_EXCEEDED)) and not isinstance(e, asyncio.TimeoutError):
+                logger.error(f"Unexpected error during concurrent execution of method {method_name} on model {model.model_id}", exc_info=True)
 
-            # 2) Health check
-            health_serving = False
-            try:
-                hstub = health_pb2_grpc.HealthStub(model.grpc_channel)
-                resp = await hstub.Check(
-                    health_pb2.HealthCheckRequest(service=""),
-                    timeout=self.timeout,
-                    wait_for_ready=False
-                )
-                health_serving = (resp.status == health_pb2.HealthCheckResponse.SERVING)
-            except Exception as he:
-                logger.warning(f"Health check failed for model {model.model_id}, {model.model_name}: {he}")
+            health_serving = True
+            # We try a health every health_check_threshold
+            if model.consecutive_timeouts > 0 and (model.consecutive_timeouts % self.health_check_threshold) == 0:
+                try:
+                    hstub = health_pb2_grpc.HealthStub(model.grpc_health_channel)
+                    resp = await hstub.Check(
+                        health_pb2.HealthCheckRequest(service=""),
+                        timeout=self.timeout,
+                        wait_for_ready=False
+                    )
+                    health_serving = (resp.status == health_pb2.HealthCheckResponse.SERVING)
+                except Exception as he:
+                    health_serving = False
+                    logger.warning(f"Health check failed for model {model.model_id}, {model.model_name}: {he}")
 
-            # 3) Decision: penalize vs reconnect
+            # Decision of reconnecting the model or penalty
             if health_serving:
                 # Application timeout while service is SERVING => penalize
                 model.register_timeout()
@@ -187,7 +207,6 @@ class ModelConcurrentRunner(ABC):
                 # Health failed or NOT_SERVING => reconnect
                 logger.debug(f"Health not SERVING for model {model.model_id}; scheduling reconnect.")
                 asyncio.create_task(self.model_cluster.reconnect_model_runner(model))
-
 
             if self.max_consecutive_timeout and model.consecutive_timeouts > self.max_consecutive_timeout:
                 asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_TIMEOUT'))
@@ -197,4 +216,4 @@ class ModelConcurrentRunner(ABC):
         except Exception:
             logger.error(f"Unexpected error during concurrent execution of method {method_name} on model {model.model_id}", exc_info=True)
 
-            return ModelPredictResult.of_failed(model)
+            return ModelPredictResult.of_failed(model, exec_time_f())
