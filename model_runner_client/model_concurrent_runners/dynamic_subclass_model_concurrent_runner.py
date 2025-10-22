@@ -27,8 +27,9 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
         host: str,
         port: int,
         base_classname: str,
-        instance_args: list[Argument] = [],
-        instance_kwargs: list[KwArgument] = []
+        instance_args: list[Argument] = None,
+        instance_kwargs: list[KwArgument] = None,
+        **kwargs
     ):
         """
         Initializes the DynamicSubclassModelConcurrentRunner.
@@ -43,7 +44,10 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
             instance_kwargs (list[KwArgument]): Keyword arguments passed to the implementation of the identified class.
         """
 
-        super().__init__(timeout, crunch_id, host, port)
+        super().__init__(timeout, crunch_id, host, port,  **kwargs)
+
+        instance_args = instance_args or []
+        instance_kwargs = instance_kwargs or []
 
         self.base_classname = base_classname
         self.instance_args = instance_args
