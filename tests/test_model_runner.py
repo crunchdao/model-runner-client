@@ -22,7 +22,7 @@ class TestModelRunner(IsolatedAsyncioTestCase):
 
         self.assertTrue(success)
         self.assertIsNone(error)
-        mock_insecure_channel.assert_called_once_with("127.0.0.1:5000", ANY)
+        mock_insecure_channel.assert_called_with("127.0.0.1:5000", ANY)
         self.runner.setup.assert_called_once()
 
     @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')

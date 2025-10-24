@@ -1,6 +1,7 @@
 import abc
 import asyncio
 import logging
+import math
 from enum import Enum
 from typing import Any
 
@@ -13,7 +14,6 @@ logger = logging.getLogger("model_runner_client.model_runner")
 
 
 class ModelRunner:
-
     class ErrorType(Enum):
         GRPC_CONNECTION_FAILED = "GRPC_CONNECTION_FAILED"
         FAILED = "FAILED"
@@ -40,11 +40,13 @@ class ModelRunner:
         self.retry_backoff_factor = retry_backoff_factor
 
         self.grpc_channel = None
+        self.grpc_health_channel = None
         self.retry_attempts = 5  # args ?
         self.min_retry_interval = 2  # 2 seconds
         self.closed = False
         self.consecutive_failures = 0
         self.consecutive_timeouts = 0
+        self.cooldown_calls_remaining = 0
 
     @abc.abstractmethod
     async def setup(self, grpc_channel) -> tuple[bool, ErrorType | None]:
@@ -57,21 +59,27 @@ class ModelRunner:
             ("grpc.min_reconnect_backoff_ms", 100),  # minimum 100 ms
             ("grpc.max_reconnect_backoff_ms", 1000),  # maximum 1 second (avoids excessive hammering)
 
-          #  ("grpc.http2.min_time_between_pings_ms", 1000),
-          #  ("grpc.http2.max_pings_without_data", 0),
+            #  ("grpc.http2.min_time_between_pings_ms", 1000),
+            #  ("grpc.http2.max_pings_without_data", 0),
             ("grpc.keepalive_time_ms", 300000),  # ping every 5 minutes
             ("grpc.keepalive_timeout_ms", 500),  # wait 500ms for ACK
             ("grpc.keepalive_permit_without_calls", 0),
         ]
 
-        grpc_setup_timeout = 10 # 10s
+        grpc_setup_timeout = 10  # 10s
         for attempt in range(1, self.retry_attempts + 1):
             if self.closed:
                 logger.debug(f"Model runner {self.model_id} closed, aborting initialization")
                 return False, self.ErrorType.ABORTED
             try:
+                # Main gRPC channel (for model interaction)
                 self.grpc_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", options)
+                # Separate health check channel (isolated TCP connection)
+                self.grpc_health_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", options)
+
                 await asyncio.wait_for(self.grpc_channel.channel_ready(), timeout=grpc_setup_timeout)
+                await asyncio.wait_for(self.grpc_health_channel.channel_ready(), timeout=grpc_setup_timeout)
+
                 # todo what happen is this take long time, need to add timeout ????
                 setup_succeed, error = await self.setup(self.grpc_channel)
                 if setup_succeed:
@@ -110,8 +118,43 @@ class ModelRunner:
     def reset_timeouts(self):
         self.consecutive_timeouts = 0
 
+    def should_skip_for_timeout_reason(self) -> bool:
+        """
+        Returns True if the model should skip the current call
+        to 'breathe' based on the number of consecutive timeouts.
+        The cooldown is expressed in number of calls instead of time.
+        """
+        if self.cooldown_calls_remaining > 0:
+            self.cooldown_calls_remaining -= 1
+            return True
+
+        if self.cooldown_calls_remaining == 0:
+            self.cooldown_calls_remaining = -1
+            return False  # give chance to no timeout
+
+        if self.consecutive_timeouts > 0:
+            cooldown_calls = math.ceil(self.consecutive_timeouts / 2)
+            self.cooldown_calls_remaining = cooldown_calls
+            if cooldown_calls > 0:
+                self.cooldown_calls_remaining = cooldown_calls
+                logger.debug(
+                    f"[{self.model_name}] {self.consecutive_timeouts} consecutive timeouts, "
+                    f"cooling down for {cooldown_calls} calls"
+                )
+                self.cooldown_calls_remaining -= 1
+                return True
+
+        return False
+
     async def close(self):
         self.closed = True
+        tasks = []
         if self.grpc_channel:
-            await self.grpc_channel.close()
-            logger.debug(f"Model runner {self.model_id} grpc connection closed")
+            tasks.append(self.grpc_channel.close())
+        if self.grpc_health_channel:
+            tasks.append(self.grpc_health_channel.close())
+
+        if tasks:
+            await asyncio.gather(*tasks)
+
+        logger.debug(f"Model runner {self.model_id} gRPC connections closed")
