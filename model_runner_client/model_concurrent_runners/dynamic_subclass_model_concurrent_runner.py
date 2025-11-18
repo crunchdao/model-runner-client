@@ -44,7 +44,7 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
             instance_kwargs (list[KwArgument]): Keyword arguments passed to the implementation of the identified class.
         """
 
-        super().__init__(timeout, crunch_id, host, port,  **kwargs)
+        super().__init__(timeout, crunch_id, host, port, **kwargs)
 
         instance_args = instance_args or []
         instance_kwargs = instance_kwargs or []
@@ -80,6 +80,7 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
         arguments: ArgumentsType = cast(Any, _Sentinel),
         args: list[Argument] = cast(Any, _Sentinel),
         kwargs: list[KwArgument] = cast(Any, _Sentinel),
+        model_runs: list[ModelRunner] | None = None
     ) -> dict[ModelRunner, ModelPredictResult]:
         """
         Executes a specific method concurrently on all connected model runners.
@@ -89,6 +90,8 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
             arguments (tuple[list[Argument], list[KwArgument]]): The name of the method to call on each model runner. For example, "predict" or "update_state".
             args (list[Argument]): Deprecated, a list of positional arguments to be passed to the method.
             kwargs (list[KwArgument]): Deprecated, a list of keyword arguments to be passed to the method.
+           model_runs (list[ModelRunner] | None): A list of model runners to execute the method on. If None, the method
+                will execute on all available model runners.
 
         Returns:
             dict[ModelRunner, ModelPredictResult]: A dictionary where each key is a `ModelRunner` instance
@@ -109,6 +112,7 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
 
         return await self._execute_concurrent_method(
             'call',
+            model_runs,
             method_name,
             arguments,
         )

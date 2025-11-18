@@ -106,6 +106,7 @@ class ModelConcurrentRunner(ABC):
     async def _execute_concurrent_method(
         self,
         method_name: str,
+        model_runs: list[ModelRunner] | None=None,
         *args: tuple[Any],
         **kwargs: dict[str, Any]
     ) -> dict[ModelRunner, ModelPredictResult]:
@@ -121,10 +122,10 @@ class ModelConcurrentRunner(ABC):
             dict[ModelRunner, ModelPredictResult]: A dictionary where the key is the model runner,
             and the value is the result or error status of the method call.
         """
-
+        model_runs = model_runs or self.model_cluster.models_run.values()
         tasks = [
             self._execute_model_method_with_timeout(model, method_name, *args, **kwargs)
-            for model in self.model_cluster.models_run.values()
+            for model in model_runs
         ]
 
         logger.debug(f"Executing '{method_name}' tasks concurrently: {tasks}")

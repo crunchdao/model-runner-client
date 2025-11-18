@@ -29,7 +29,7 @@ class TrainInferModelConcurrentRunner(ModelConcurrentRunner):
         """
         super().__init__(timeout, crunch_id, host, port)
 
-    def create_model_runner(self, deployment_id:str, model_id: str, model_name: str, ip: str, port: int, infos: dict) -> ModelRunner:
+    def create_model_runner(self, deployment_id: str, model_id: str, model_name: str, ip: str, port: int, infos: dict) -> ModelRunner:
         """
         Factory method to create an instance of TrainInferModelRunner.
         """
@@ -50,7 +50,7 @@ class TrainInferModelConcurrentRunner(ModelConcurrentRunner):
         if type(argument_value) != bytes:
             argument_value = encode_data(argument_value, argument_type)
 
-        return await self._execute_concurrent_method("predict", argument_type, argument_value)
+        return await self._execute_concurrent_method("predict", None, argument_type, argument_value)
 
     async def train(self, argument_type, argument_value) -> dict[ModelRunner, ModelPredictResult]:
         raise Exception("Not implemented yet")
