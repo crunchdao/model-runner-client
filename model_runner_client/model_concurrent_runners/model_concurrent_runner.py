@@ -106,7 +106,8 @@ class ModelConcurrentRunner(ABC):
     async def _execute_concurrent_method(
         self,
         method_name: str,
-        model_runs: list[ModelRunner] | None=None,
+        timeout: int | None = None,
+        model_runs: list[ModelRunner] | None = None,
         *args: tuple[Any],
         **kwargs: dict[str, Any]
     ) -> dict[ModelRunner, ModelPredictResult]:
@@ -124,7 +125,7 @@ class ModelConcurrentRunner(ABC):
         """
         model_runs = model_runs or self.model_cluster.models_run.values()
         tasks = [
-            self._execute_model_method_with_timeout(model, method_name, *args, **kwargs)
+            self._execute_model_method_with_timeout(model, method_name, timeout, *args, **kwargs)
             for model in model_runs
         ]
 
@@ -137,17 +138,19 @@ class ModelConcurrentRunner(ABC):
             if not isinstance(result, BaseException)
         }
 
+
     async def _execute_model_method_with_timeout(
         self,
         model: ModelRunner,
         method_name: str,
+        timeout: int | None = None,
         *args: tuple[Any],
         **kwargs: dict[str, Any],
     ) -> ModelPredictResult:
 
         start_time = asyncio.get_event_loop().time()
         exec_time_f = lambda: int((asyncio.get_event_loop().time() - start_time) * 1_000_000)
-
+        timeout = timeout or self.timeout
         try:
             method = getattr(model, method_name)
 
@@ -155,7 +158,7 @@ class ModelConcurrentRunner(ABC):
                 raise asyncio.TimeoutError()
 
             try:
-                result, error = await method(*args, **kwargs, timeout=self.timeout)
+                result, error = await method(*args, **kwargs, timeout=timeout)
             except ValueError:  # decode error
                 error = ModelRunner.ErrorType.FAILED
 
@@ -180,7 +183,7 @@ class ModelConcurrentRunner(ABC):
         except (asyncio.TimeoutError, AioRpcError) as e:
             exec_time = exec_time_f()
 
-            logger.debug(f"Method {method_name} on model {model.model_id}, {model.model_name} timed out after {self.timeout} seconds.", exc_info=True)
+            logger.debug(f"Method {method_name} on model {model.model_id}, {model.model_name} timed out after {timeout} seconds.", exc_info=True)
 
             if not (isinstance(e, AioRpcError) and (e.code() == StatusCode.RESOURCE_EXHAUSTED or e.code() == StatusCode.DEADLINE_EXCEEDED)) and not isinstance(e, asyncio.TimeoutError):
                 logger.error(f"Unexpected error during concurrent execution of method {method_name} on model {model.model_id}", exc_info=True)
@@ -192,7 +195,7 @@ class ModelConcurrentRunner(ABC):
                     hstub = health_pb2_grpc.HealthStub(model.grpc_health_channel)
                     resp = await hstub.Check(
                         health_pb2.HealthCheckRequest(service=""),
-                        timeout=self.timeout,
+                        timeout=timeout,
                         wait_for_ready=False
                     )
                     health_serving = (resp.status == health_pb2.HealthCheckResponse.SERVING)

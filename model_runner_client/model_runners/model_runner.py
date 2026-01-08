@@ -2,6 +2,7 @@ import abc
 import asyncio
 import logging
 import math
+import uuid
 from enum import Enum
 from typing import Any
 
@@ -30,6 +31,7 @@ class ModelRunner:
         infos: dict[str, Any],
         retry_backoff_factor: float = 2
     ):
+        self.runner_id = uuid.uuid4().hex # unique identifier per instance
         self.deployment_id = deployment_id
         self.model_id = model_id
         self.model_name = model_name
