@@ -80,7 +80,8 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
         arguments: ArgumentsType = cast(Any, _Sentinel),
         args: list[Argument] = cast(Any, _Sentinel),
         kwargs: list[KwArgument] = cast(Any, _Sentinel),
-        model_runs: list[ModelRunner] | None = None
+        timeout: int | None = None,
+        model_runs: list[ModelRunner] | None = None,
     ) -> dict[ModelRunner, ModelPredictResult]:
         """
         Executes a specific method concurrently on all connected model runners.
@@ -112,6 +113,7 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
 
         return await self._execute_concurrent_method(
             'call',
+            timeout,
             model_runs,
             method_name,
             arguments,
