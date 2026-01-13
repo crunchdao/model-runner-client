@@ -11,6 +11,8 @@ from grpc_health.v1 import health_pb2, health_pb2_grpc
 
 from ..model_cluster import ModelCluster
 from ..model_runners.model_runner import ModelRunner
+from ..security.credentials import SecureCredentials
+from ..security.wallet_gelegation import AuthError
 
 logger = logging.getLogger("model_runner_client")
 
@@ -70,6 +72,7 @@ class ModelConcurrentRunner(ABC):
         port: int,
         max_consecutive_failures: int = MAX_CONSECUTIVE_FAILURES,
         max_consecutive_timeouts: int = MAX_CONSECUTIVE_TIMEOUTS,
+        secure_credentials: SecureCredentials | None = None
     ):
         self.timeout = timeout
         self.host = host
@@ -80,6 +83,7 @@ class ModelConcurrentRunner(ABC):
         self.max_consecutive_timeout = max_consecutive_timeouts
 
         self.health_check_threshold = max(1, int(self.max_consecutive_timeout * 0.2))
+        self.secure_credentials = secure_credentials
 
         # TODO: Implement this. If the option is enabled, allow the model time to recover after a timeout.
         # self.enable_recovery_mode
@@ -94,12 +98,7 @@ class ModelConcurrentRunner(ABC):
     @abstractmethod
     def create_model_runner(
         self,
-        deployment_id: str,
-        model_id: str,
-        model_name: str,
-        ip: str,
-        port: int,
-        infos: dict[str, Any]
+       **kwargs # refer to ModelRunner constructor
     ) -> ModelRunner:
         pass
 
@@ -216,6 +215,10 @@ class ModelConcurrentRunner(ABC):
                 asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_TIMEOUT'))
 
             return ModelPredictResult.of_timeout(model, exec_time)
+
+        except AuthError as e:
+            logger.error(f"Auth error during concurrent execution of method {method_name} on model {model.model_id}: {e}")
+            asyncio.create_task(self.model_cluster.process_failure(model, 'CONNECTION_FAILED', str(e)))
 
         except Exception:
             logger.error(f"Unexpected error during concurrent execution of method {method_name} on model {model.model_id}", exc_info=True)

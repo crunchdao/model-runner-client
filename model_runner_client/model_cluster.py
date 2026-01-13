@@ -142,7 +142,7 @@ class ModelCluster:
                 await self.process_failure(model_runner, 'BAD_IMPLEMENTATION')
             elif error == ModelRunner.ErrorType.ABORTED:
                 return
-            elif error == ModelRunner.ErrorType.GRPC_CONNECTION_FAILED:
+            elif error in [ModelRunner.ErrorType.GRPC_CONNECTION_FAILED, ModelRunner.ErrorType.AUTH_ERROR]:
                 await self.process_failure(model_runner, 'CONNECTION_FAILED')
             else:
                 await self.process_failure(model_runner, 'MULTIPLE_FAILED')

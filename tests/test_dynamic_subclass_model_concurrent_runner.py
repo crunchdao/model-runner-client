@@ -13,7 +13,7 @@ from model_runner_client.model_runners.dynamic_subclass_model_runner import Dyna
 
 
 def create_model_runner(deployement_id, model_id, model_name, ip, port, infos):
-    model_runner = DynamicSubclassModelRunner('birdgame.trackers.trackerbase.TrackerBase', deployement_id, model_id, model_name, ip, port, infos)
+    model_runner = DynamicSubclassModelRunner('birdgame.trackers.trackerbase.TrackerBase', deployment_id=deployement_id, model_id=model_id, model_name=model_name, ip=ip, port=port, infos=infos)
     return model_runner
 
 
