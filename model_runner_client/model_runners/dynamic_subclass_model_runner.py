@@ -3,7 +3,7 @@ from typing import Any, Callable, Optional, Union, cast
 from ..errors import InvalidCoordinatorUsageError
 from ..grpc.generated.commons_pb2 import Argument, KwArgument
 from ..grpc.generated.dynamic_subclass_pb2 import (CallRequest, CallResponse,
-                                                   SetupRequest)
+                                                   SetupRequest, SetupResponse)
 from ..grpc.generated.dynamic_subclass_pb2_grpc import \
     DynamicSubclassServiceStub
 from ..model_runners.model_runner import ModelRunner
@@ -21,14 +21,9 @@ class DynamicSubclassModelRunner(ModelRunner):
     def __init__(
         self,
         base_classname: str,
-        deployment_id: str,
-        model_id: str,
-        model_name: str,
-        ip: str,
-        port: int,
-        infos: dict[str, Any],
         instance_args: list[Argument] = [],
         instance_kwargs: list[KwArgument] = [],
+        **kwargs
     ):
         """
         Initialize the DynamicSubclassModelRunner.
@@ -49,7 +44,7 @@ class DynamicSubclassModelRunner(ModelRunner):
 
         self.grpc_stub: Optional[DynamicSubclassServiceStub] = None
 
-        super().__init__(deployment_id, model_id, model_name, ip, port, infos)
+        super().__init__(**kwargs)
 
     async def setup(self, grpc_channel: Any) -> tuple[bool, ModelRunner.ErrorType | None]:
         """

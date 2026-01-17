@@ -2,10 +2,8 @@ from typing import Any, Callable, cast
 from warnings import warn
 
 from ..grpc.generated.commons_pb2 import Argument, KwArgument
-from ..model_concurrent_runners.model_concurrent_runner import (
-    ModelConcurrentRunner, ModelPredictResult)
-from ..model_runners.dynamic_subclass_model_runner import (
-    ArgumentsType, DynamicSubclassModelRunner)
+from ..model_concurrent_runners.model_concurrent_runner import ModelConcurrentRunner, ModelPredictResult
+from ..model_runners import ArgumentsType, DynamicSubclassModelRunner
 from ..model_runners.model_runner import ModelRunner
 
 
@@ -55,23 +53,14 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
 
     def create_model_runner(
         self,
-        deployment_id: str,
-        model_id: str,
-        model_name: str,
-        ip: str,
-        port: int,
-        infos: dict[str, Any]
+        **kwargs
     ) -> DynamicSubclassModelRunner:
         return DynamicSubclassModelRunner(
             self.base_classname,
-            deployment_id,
-            model_id,
-            model_name,
-            ip,
-            port,
-            infos,
             self.instance_args,
-            self.instance_kwargs
+            self.instance_kwargs,
+            secure_credentials=self.secure_credentials,
+            **kwargs
         )
 
     async def call(

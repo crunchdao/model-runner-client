@@ -1,9 +1,9 @@
 import asyncio
 import logging
 
-from model_runner_client.model_concurrent_runners.dynamic_subclass_model_concurrent_runner import DynamicSubclassModelConcurrentRunner
+from model_runner_client.model_concurrent_runners import DynamicSubclassModelConcurrentRunner
 from model_runner_client.grpc.generated.commons_pb2 import VariantType, Argument, Variant
-from model_runner_client.utils.datatype_transformer import encode_data
+from model_runner_client.security.credentials import SecureCredentials
 
 
 async def main():
@@ -17,7 +17,22 @@ async def main():
     logger = logging.getLogger("model_runner_client")
     logger.setLevel(logging.DEBUG)
     host = "localhost"
-    concurrent_runner = DynamicSubclassModelConcurrentRunner(timeout=10, crunch_id="bird-game", host=host, port=9091, base_classname='birdgame.trackers.trackerbase.TrackerBase')
+
+
+    secure_credentials = SecureCredentials.from_directory(
+        path="../../crunch-certificate/coordinator-3/issued-certificate"
+    )
+
+    concurrent_runner = DynamicSubclassModelConcurrentRunner(
+        timeout=10,
+        crunch_id="bird-game",
+        host=host,
+        port=9091,
+        base_classname='birdgame.trackers.trackerbase.TrackerBase',
+        secure_credentials=secure_credentials,
+        report_failure=False
+    )
+
     await concurrent_runner.init()
 
     async def prediction_call():
@@ -25,9 +40,9 @@ async def main():
             payload = {'falcon_location': 21.179864629354732, 'time': 230.96231205799998, 'dove_location': 19.164986723324326, 'falcon_id': 1}
             payload_encoded = encode_data(VariantType.JSON, payload)
             await concurrent_runner.call(method_name='tick',
-                                                  args=[
-                                                      Argument(position=1, data=Variant(type=VariantType.JSON, value=payload_encoded))
-                                                  ])
+                                         args=[
+                                             Argument(position=1, data=Variant(type=VariantType.JSON, value=payload_encoded))
+                                         ])
 
             result = await concurrent_runner.call(method_name='predict')
 

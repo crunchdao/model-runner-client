@@ -7,8 +7,38 @@
 - **Real-Time Model Sync**: Each model participating in your crunch is an instance of `ModelRunner`, maintained via WebSocket in the `ModelCluster`.
 - **Concurrent Predictions (with Timeout Handling)**: Use the derived class of `ModelConcurrentRunner` (an abstract class) to request predictions from all models simultaneously. Define a timeout to avoid blocking if a model takes too long
   to predict. Make sure to select the proper instance based on the requirements of your crunch.
-    - `DynamicSubclassModelConcurrentRunner`: Allows you to find a subclass on the remote model, instantiate it, and access all its methods.
-    - `TrainInferModelConcurrentRunner`: Enables communication with a model that has declared the `infer` and `train` methods.
+  - `DynamicSubclassModelConcurrentRunner`: Allows you to find a subclass on the remote model, instantiate it, and access all its methods.
+
+## Secure Connections
+
+To securely connect with model nodes using Crunch Secure Model Protocol, you can use the `SecureCredentials` object. Below is an example illustrating how to include secure credentials:
+
+```python
+from model_runner_client.security.credentials import SecureCredentials
+
+secure_credentials = SecureCredentials.from_directory(
+  path="../../issued-certificate",
+)
+```
+
+The `from_directory` method loads TLS certificates from the specified path to establish a secure connection with model nodes. Ensure that the directory contains valid certificates issued for your coordinator instance.  
+If you lack the TLS certificates and signed message, generate them using [crunch certificate generator](https://pypi.org/project/crunch-certificate/).
+
+In debugging mode, to avoid stopping the model node due to a bad `secure_credentials` configuration, you can set the `report_failure` option to `False` when initializing the connection. This prevents models from being disrupted by
+misconfigurations during development:
+
+```python
+secure_credentials = SecureCredentials.from_directory(
+  path="../../issued-certificate",
+)
+
+concurrent_runner = DynamicSubclassModelConcurrentRunner(
+  ...,  # take look to the example below 
+  secure_credentials=secure_credentials,
+  report_failure=False
+)
+
+```
 
 # Installation
 
@@ -32,78 +62,79 @@ In the simplest case, the same input is passed to all models. Here's how to stru
 
 ```python
 import asyncio
-from model_runner_client.model_concurrent_runners.dynamic_subclass_model_concurrent_runner import DynamicSubclassModelConcurrentRunner
+from model_runner_client.model_concurrent_runners import DynamicSubclassModelConcurrentRunner
 from model_runner_client.grpc.generated.commons_pb2 import VariantType, Argument, Variant
 from model_runner_client.utils.datatype_transformer import encode_data
 
 
 async def main():
-    # crunch_id, host, and port are values provided by crunchdao
-    concurrent_runner = DynamicSubclassModelConcurrentRunner(
-        timeout=10,
-        crunch_id="bird-game",
-        host="localhost",
-        port=8000,
-        base_classname='birdgame.trackers.trackerbase.TrackerBase'
-    )
+  # crunch_id, host, and port are values provided by crunchdao
+  concurrent_runner = DynamicSubclassModelConcurrentRunner(
+    timeout=10,
+    crunch_id="bird-game",
+    host="localhost",
+    port=8000,
+    base_classname='birdgame.trackers.trackerbase.TrackerBase'
+    # secure_credentials=secure_credentials,
+  )
 
-    # Initialize communication with the model nodes to fetch 
-    # models that want to predict and set up the model cluster
-    await concurrent_runner.init()
+  # Initialize communication with the model nodes to fetch 
+  # models that want to predict and set up the model cluster
+  await concurrent_runner.init()
 
-    async def prediction_call():
-        while True:
-            # Your data to be predicted (X)
-            payload = {
-                'falcon_location': 21.179864629354732,
-                'time': 230.96231205799998,
-                'dove_location': 19.164986723324326,
-                'falcon_id': 1
-            }
+  async def prediction_call():
+    while True:
+      # Your data to be predicted (X)
+      payload = {
+        'falcon_location': 21.179864629354732,
+        'time': 230.96231205799998,
+        'dove_location': 19.164986723324326,
+        'falcon_id': 1
+      }
 
-            # Encode data as binary and tick
-            await concurrent_runner.call(
-                method_name='tick',
-                arguments=(
-                    # args
-                    # The order of positional arguments is strictly enforced and must match the model's method signature.
-                    # Adding a new positional argument during a crunch would break existing model implementations.
-                    [
-                        Argument(position=1, data=Variant(type=VariantType.JSON, value=encode_data(VariantType.JSON, payload)))
-                    ],
+      # Encode data as binary and tick
+      await concurrent_runner.call(
+        method_name='tick',
+        arguments=(
+          # args
+          # The order of positional arguments is strictly enforced and must match the model's method signature.
+          # Adding a new positional argument during a crunch would break existing model implementations.
+          [
+            Argument(position=1, data=Variant(type=VariantType.JSON, value=encode_data(VariantType.JSON, payload)))
+          ],
 
-                    # kwargs
-                    # These keyword arguments are passed only if the model's method explicitly expects them.
-                    # It is recommended to use kwargs for optional parameters, as they can be introduced without breaking compatibility.
-                    [],
-                )
-            )
+          # kwargs
+          # These keyword arguments are passed only if the model's method explicitly expects them.
+          # It is recommended to use kwargs for optional parameters, as they can be introduced without breaking compatibility.
+          [],
+        )
+      )
 
-            # predict now
-            result = await concurrent_runner.call(method_name='predict')
+      # predict now
+      result = await concurrent_runner.call(method_name='predict')
 
-            # You receive a dictionary of predictions
-            for model_runner, model_predict_result in result.items():
-                print(f"{model_runner.model_id}: {model_predict_result}")
+      # You receive a dictionary of predictions
+      for model_runner, model_predict_result in result.items():
+        print(f"{model_runner.model_id}: {model_predict_result}")
 
-            # This pause (30s) simulates other work 
-            # the Coordinator might perform between predictions
-            await asyncio.sleep(30)
+      # This pause (30s) simulates other work 
+      # the Coordinator might perform between predictions
+      await asyncio.sleep(30)
 
-    # Keep the cluster updated with `concurrent_runner.sync()`, 
-    # which maintains a permanent WebSocket connection.
-    # Then run our prediction process.
-    await asyncio.gather(
-        asyncio.create_task(concurrent_runner.sync()),
-        asyncio.create_task(prediction_call())
-    )
+  # Keep the cluster updated with `concurrent_runner.sync()`, 
+  # which maintains a permanent WebSocket connection.
+  # Then run our prediction process.
+  await asyncio.gather(
+    asyncio.create_task(concurrent_runner.sync()),
+    asyncio.create_task(prediction_call())
+  )
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\nReceived exit signal, shutting down gracefully.")
+  try:
+    asyncio.run(main())
+  except KeyboardInterrupt:
+    print("\nReceived exit signal, shutting down gracefully.")
 ```
 
 ### Per-Model Arguments (Advanced Usage)
