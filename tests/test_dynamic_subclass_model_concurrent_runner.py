@@ -7,13 +7,12 @@ import websockets
 from model_runner_client.grpc.generated import commons_pb2
 from model_runner_client.grpc.generated.commons_pb2 import Argument, Variant, VariantType
 from model_runner_client.grpc.generated.dynamic_subclass_pb2 import SetupResponse, CallResponse
-from model_runner_client.model_concurrent_runners.dynamic_subclass_model_concurrent_runner import DynamicSubclassModelConcurrentRunner
-from model_runner_client.model_concurrent_runners.model_concurrent_runner import ModelConcurrentRunner, ModelPredictResult
-from model_runner_client.model_runners.dynamic_subclass_model_runner import DynamicSubclassModelRunner
+from model_runner_client.model_concurrent_runners import DynamicSubclassModelConcurrentRunner, ModelPredictResult
+from model_runner_client.model_runners import DynamicSubclassModelRunner
 
 
-def create_model_runner(deployement_id, model_id, model_name, ip, port, infos):
-    model_runner = DynamicSubclassModelRunner('birdgame.trackers.trackerbase.TrackerBase', deployment_id=deployement_id, model_id=model_id, model_name=model_name, ip=ip, port=port, infos=infos)
+def create_model_runner(deployment_id, model_id, model_name, ip, port, infos):
+    model_runner = DynamicSubclassModelRunner('birdgame.trackers.trackerbase.TrackerBase', deployment_id=deployment_id, model_id=model_id, model_name=model_name, ip=ip, port=port, infos=infos)
     return model_runner
 
 

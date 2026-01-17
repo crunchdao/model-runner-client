@@ -101,7 +101,7 @@ class ModelRunner:
                 if not is_secure_connection and await is_tls_connection(self.ip, self.port):
                     raise InvalidCoordinatorUsageError("The Model Nodes are in secure mode and credentials were not provided for connection.")
 
-                logger.warning(f"Model runner {self.model_id} initialization failed due to connection or timeout error.")
+                logger.warning(f"Initialization of model runner {self.model_id} failed due to a connection or timeout error: {e}")
                 last_error = e
 
             except InvalidCoordinatorUsageError:
@@ -171,7 +171,7 @@ class ModelRunner:
         self.grpc_health_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", self.grpc_options)
 
     async def _connect_secure_channels(self):
-        server_hostname = f"model-node-{self.model_id}"
+        server_hostname = f"model-node-{self.model_id}.crunchdao.internal"
         target = f"{self.ip}:{self.port}"
         peer_tls = await fetch_peer_rsa_spki_mtls(
             host=self.ip,
@@ -188,6 +188,7 @@ class ModelRunner:
 
         call_creds = grpc.metadata_call_credentials(StaticAuthMetadata(self.secure_credentials.metadata))
         self.grpc_options.append(("grpc.ssl_target_name_override", server_hostname))
+        self.grpc_options.append(("grpc.default_authority", server_hostname))
 
         channel_creds = grpc.composite_channel_credentials(client_creds, call_creds)
 
@@ -197,8 +198,9 @@ class ModelRunner:
             options=self.grpc_options,
             interceptors=[
                 WalletTlsAuthClientInterceptor(
-                    expected_wallet_pub_b58=self.infos["cruncher_id"],
-                    model_id=self.model_id,
+                    expected_wallet_pub_b58=self.infos["cruncher_wallet_pubkey"],
+                    expected_hotkey=self.infos["cruncher_hotkey"],
+                    expected_model_id=self.model_id,
                     tls_pub=peer_tls.spki_der
                 )
             ]

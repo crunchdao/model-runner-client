@@ -33,12 +33,14 @@ class WalletTlsAuthClientInterceptor(
     def __init__(
         self,
         expected_wallet_pub_b58: str,
-        model_id: str,
+        expected_hotkey: str,
+        expected_model_id: str,
         tls_pub: bytes,
         protected_prefix: str = "",
     ):
         self.expected_wallet_pub_b58 = expected_wallet_pub_b58
-        self.model_id = model_id
+        self.expected_hotkey = expected_hotkey
+        self.expected_model_id = expected_model_id
         self.tls_pub = tls_pub
         self.protected_prefix = protected_prefix
 
@@ -68,26 +70,11 @@ class WalletTlsAuthClientInterceptor(
             wallet_pub_b58=wallet_pubkey_b58,
             expected_wallet_pub_b58=self.expected_wallet_pub_b58,
             tls_pub=self.tls_pub,
-            expect_model_id=self.model_id
+            expected_hotkey=self.expected_hotkey,
+            expected_model_id=self.expected_model_id
         )
 
-    async def intercept_unary_unary(self, continuation, client_call_details, request):
-        call = await continuation(client_call_details, request)
-
-        method = client_call_details.method
-        if not self._should_protect(method):
-            return call
-
-        try:
-            md = await call.initial_metadata()  # server response headers
-            await self._verify_from_call_headers(method, md)
-        except Exception as e:
-            call.cancel()
-            raise  # raise AuthError/ValueError/etc.
-
-        return call
-
-    async def intercept_unary_stream(self, continuation, client_call_details, request):
+    async def _intercept(self, continuation, client_call_details, request, is_stream: bool):
         call = await continuation(client_call_details, request)
 
         method = client_call_details.method
@@ -97,8 +84,29 @@ class WalletTlsAuthClientInterceptor(
         try:
             md = await call.initial_metadata()
             await self._verify_from_call_headers(method, md)
+        except AuthError:
+            call.cancel()
+            if call.done():
+                grpc_code = None
+                grpc_details = None
+
+                try:
+                    grpc_code = await call.code()
+                    grpc_details = await call.details()
+                except Exception:
+                    pass
+
+                if grpc_code and grpc_code == grpc.StatusCode.UNAUTHENTICATED:
+                    raise AuthError(f"The credentials you are refused by the Model Node => {grpc_details}")
+            raise
         except Exception:
             call.cancel()
             raise
 
         return call
+
+    async def intercept_unary_unary(self, continuation, client_call_details, request):
+        return await self._intercept(continuation, client_call_details, request, is_stream=False)
+
+    async def intercept_unary_stream(self, continuation, client_call_details, request):
+        return await self._intercept(continuation, client_call_details, request, is_stream=True)

@@ -7,6 +7,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+
 class TlsProbeError(RuntimeError):
     pass
 
@@ -37,7 +38,10 @@ async def is_tls_connection(
 ):
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.set_alpn_protocols(["h2"])  # gRPC uses HTTP/2
-    ctx.check_hostname = False
+
+    # The purpose is to retrieve the certificate (if present) and extract its public key, 
+    # without validating the certificate's authenticity.
+    ctx.check_hostname = False # The
     ctx.verify_mode = ssl.CERT_NONE
 
     try:

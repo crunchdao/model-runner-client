@@ -6,9 +6,10 @@ import ssl
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from model_runner_client.security.wallet_gelegation import load_pubkey_from_pem_cert
+from .wallet_gelegation import load_pubkey_from_pem_cert
 
 Metadata = tuple[tuple[str, str], ...]
+
 
 @dataclass(frozen=True)
 class SecureCredentials:
@@ -35,23 +36,36 @@ class SecureCredentials:
         object.__setattr__(self, "metadata", md)
 
     @classmethod
+    def from_directory(
+        cls,
+        path: str | Path
+    ) -> "SecureCredentials":
+        path = Path(path)
+        return cls.from_files(
+            ca_cert_path=path / "ca.crt",
+            tls_cert_path=path / "tls.crt",
+            tls_key_path=path / "tls.key",
+            signed_message_path=path / "coordinator_msg.json",
+        )
+
+    @classmethod
     def from_files(
         cls,
         ca_cert_path: str | Path,
         tls_cert_path: str | Path,
         tls_key_path: str | Path,
-        signed_message_json: str | Path,
+        signed_message_path: str | Path,
     ) -> "SecureCredentials":
         ca_cert_path = Path(ca_cert_path)
         tls_cert_path = Path(tls_cert_path)
         tls_key_path = Path(tls_key_path)
-        signed_message_json = Path(signed_message_json)
+        signed_message_path = Path(signed_message_path)
 
         obj = cls(
             ca_bytes=ca_cert_path.read_bytes(),
             cert_bytes=tls_cert_path.read_bytes(),
             key_bytes=tls_key_path.read_bytes(),
-            signed_message=json.loads(signed_message_json.read_text(encoding="utf-8")),
+            signed_message=json.loads(signed_message_path.read_text(encoding="utf-8")),
         )
 
         object.__setattr__(
@@ -83,4 +97,3 @@ class SecureCredentials:
         if load_pubkey_from_pem_cert(self.cert_bytes) != cert_pub_bytes:
             raise ValueError("Certificate public key does not match with the one in the signed message. Check if the signed message was generated with the correct certificate.")
         return True
-

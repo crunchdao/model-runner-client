@@ -63,7 +63,6 @@ class DelegationInfo:
     model_id: str | None = None
     expires_at: int | None = None
 
-
 def verify_wallet_delegation(
     *,
     message_b64: str,
@@ -71,7 +70,8 @@ def verify_wallet_delegation(
     wallet_pub_b58: str,
     expected_wallet_pub_b58: str,
     tls_pub: bytes,
-    expect_model_id:str|None = None
+    expected_hotkey: str,
+    expected_model_id: str | None = None
 ) -> DelegationInfo:
     """
     Generic verification logic, independent of gRPC.
@@ -95,7 +95,7 @@ def verify_wallet_delegation(
 
     # 2) Wallet pubkey check (bind delegation to a specific wallet)
     if wallet_pub_b58 != expected_wallet_pub_b58:
-        raise AuthError("Wallet pubkey does not match expected crunch wallet")
+        raise AuthError("The provided wallet public key does not match the expected public key.")
 
     # 3) Check signature
     if not wallet_verify(wallet_pub_bytes, message_bytes, signature):
@@ -120,11 +120,13 @@ def verify_wallet_delegation(
     if tls_pub != cert_pub_bytes:
         raise AuthError("TLS client key does not match wallet-authorized cert_pub")
 
-    # TODO check the hotkey
-
     model_id = payload.get("model_id")
-    if expect_model_id is not None and model_id != expect_model_id:
-        raise AuthError("model_id in payload does not match the expected model_id")
+    if model_id != expected_model_id:
+        raise AuthError("The model_id in the payload does not match the expected model_id.")
+
+    hotkey = payload.get("hotkey")
+    if hotkey != expected_hotkey:
+        raise AuthError("Hotkey in the payload does not match the expected hotkey.")
 
     expires_raw = payload.get("expires_at")
     expires_at = int(expires_raw) if expires_raw is not None else None

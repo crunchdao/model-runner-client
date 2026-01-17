@@ -5,9 +5,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 import grpc
 from grpc_health.v1 import health_pb2
 
-from model_runner_client.model_concurrent_runners.model_concurrent_runner import (
-    ModelConcurrentRunner, ModelPredictResult)
-from model_runner_client.model_runners.model_runner import ModelRunner
+from model_runner_client.model_concurrent_runners import ModelConcurrentRunner, ModelPredictResult
+from model_runner_client.model_runners import ModelRunner
 
 
 class TestModelConcurrentRunner(IsolatedAsyncioTestCase):

@@ -1,15 +1,15 @@
 import json
 import logging
 
-from model_runner_client.model_runners.model_runner import ModelRunner
-from model_runner_client.websocket_client import WebsocketClient
+from .model_runners import ModelRunner
+from .websocket_client import WebsocketClient
 
 logger = logging.getLogger("model_runner_client.model_cluster")
 import asyncio
 
 
 class ModelCluster:
-    def __init__(self, crunch_id: str, ws_host: str, ws_port: int, model_factory: callable):
+    def __init__(self, crunch_id: str, ws_host: str, ws_port: int, model_factory: callable, report_failure=True):
         """
         ModelCluster constructor.
 
@@ -22,6 +22,7 @@ class ModelCluster:
         logger.debug(f"Initializing ModelCluster with Crunch ID: {crunch_id}")
         self.ws_client = WebsocketClient(ws_host, ws_port, crunch_id, event_handler=self.handle_event)
         self.model_factory = model_factory
+        self.report_failure = report_failure
 
     async def init(self):
         await self.ws_client.connect()
@@ -95,7 +96,6 @@ class ModelCluster:
                 logger.debug(f"Model with ID {model_id} is already running in the cluster, but its deployment ID is different {deployment_id}<>{model_runner.deployment_id}. Certainly a state change of the previous/new deployment")
                 model_runner = None
 
-
             if model_runner:
                 if state == "STOPPED":
                     # Remove model if state is "stopped"
@@ -112,7 +112,14 @@ class ModelCluster:
                     logger.debug(f"Model with ID {model_id}  and deployment ID {deployment_id} is not found in the cluster state, and its state is 'STOPPED'. No action is required.")
                 elif state == "RUNNING":
                     logger.debug(f"New model with ID {model_id} is running, we add it to the cluster state.")
-                    model_runner = self.model_factory(deployment_id, model_id, model_name, ip, port, infos)
+                    model_runner = self.model_factory(
+                        deployment_id=deployment_id,
+                        model_id=model_id,
+                        model_name=model_name,
+                        ip=ip,
+                        port=port,
+                        infos=infos
+                    )
                     tasks.append(self.add_model_runner(model_runner))
                 else:
                     logger.warning(f"Model updated: {model_id}, with state: {state} => This state is not handled...")
@@ -133,7 +140,6 @@ class ModelCluster:
             logger.info(f"A model with ID {current_model.model_id}, deployment ID {current_model.deployment_id} is already running in the cluster. Closing connection with the old one.")
             await self.remove_model_runner(current_model)
 
-
         is_initialized, error = await model_runner.init()
         if is_initialized:
             self.models_run[model_runner.model_id] = model_runner
@@ -148,6 +154,10 @@ class ModelCluster:
                 await self.process_failure(model_runner, 'MULTIPLE_FAILED')
 
     async def process_failure(self, model_runner: ModelRunner, failure_code: str, failure_reason: str = None):
+        if not self.report_failure:
+            logger.warning(f"Process failure is disabled: model_id={model_runner.model_id}, failure_code={failure_code}, failure_reason={failure_reason}")
+            return
+
         error_msg = {
             "event": "report_failure",
             "data": [
@@ -177,12 +187,12 @@ class ModelCluster:
             logger.info(f"Reconnecting model with ID: {model_runner.model_id}, first we disconnect it...")
             await self.remove_model_runner(model_runner)
             model_runner = self.model_factory(
-                model_runner.deployment_id,
-                model_runner.model_id,
-                model_runner.model_name,
-                model_runner.ip,
-                model_runner.port,
-                model_runner.infos
+                deployment_id=model_runner.deployment_id,
+                model_id=model_runner.model_id,
+                model_name=model_runner.model_name,
+                ip=model_runner.ip,
+                port=model_runner.port,
+                infos=model_runner.infos
             )
             await self.add_model_runner(model_runner)
         except Exception as e:
