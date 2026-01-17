@@ -37,7 +37,7 @@ class ModelRunner:
         retry_backoff_factor: float = 2,
         secure_credentials: SecureCredentials | None = None
     ):
-        self.runner_id = uuid.uuid4().hex # unique identifier per instance
+        self.runner_id = uuid.uuid4().hex  # unique identifier per instance
         self.deployment_id = deployment_id
         self.model_id = model_id
         self.model_name = model_name
@@ -57,6 +57,7 @@ class ModelRunner:
         self.cooldown_calls_remaining = 0
 
         self.secure_credentials = secure_credentials
+        self.server_hostname = f"model-node-{self.model_id}.crunchdao.internal"
 
     @abc.abstractmethod
     async def setup(self, grpc_channel) -> tuple[bool, ErrorType | None]:
@@ -77,6 +78,10 @@ class ModelRunner:
         ]
 
         is_secure_connection = self.secure_credentials is not None
+        if is_secure_connection:
+            self.grpc_options.append(("grpc.ssl_target_name_override", self.server_hostname))
+            self.grpc_options.append(("grpc.default_authority", self.server_hostname))
+
         grpc_setup_timeout = 10  # 10s
         for attempt in range(1, self.retry_attempts + 1):
             if self.closed:
@@ -171,13 +176,12 @@ class ModelRunner:
         self.grpc_health_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", self.grpc_options)
 
     async def _connect_secure_channels(self):
-        server_hostname = f"model-node-{self.model_id}.crunchdao.internal"
         target = f"{self.ip}:{self.port}"
         peer_tls = await fetch_peer_rsa_spki_mtls(
             host=self.ip,
             port=self.port,
             tls_ctx=self.secure_credentials.tls_ctx,
-            server_hostname=server_hostname
+            server_hostname=self.server_hostname
         )
 
         client_creds = grpc.ssl_channel_credentials(
@@ -187,8 +191,6 @@ class ModelRunner:
         )
 
         call_creds = grpc.metadata_call_credentials(StaticAuthMetadata(self.secure_credentials.metadata))
-        self.grpc_options.append(("grpc.ssl_target_name_override", server_hostname))
-        self.grpc_options.append(("grpc.default_authority", server_hostname))
 
         channel_creds = grpc.composite_channel_credentials(client_creds, call_creds)
 
@@ -198,8 +200,8 @@ class ModelRunner:
             options=self.grpc_options,
             interceptors=[
                 WalletTlsAuthClientInterceptor(
-                    expected_wallet_pub_b58=self.infos["cruncher_wallet_pubkey"],
-                    expected_hotkey=self.infos["cruncher_hotkey"],
+                    expected_wallet_pub_b58=self.infos.get("cruncher_wallet_pubkey"),
+                    expected_hotkey=self.infos.get("cruncher_hotkey"),
                     expected_model_id=self.model_id,
                     tls_pub=peer_tls.spki_der
                 )
