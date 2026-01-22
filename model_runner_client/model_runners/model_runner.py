@@ -10,6 +10,10 @@ import grpc
 from grpc.aio import AioRpcError
 
 from ..errors import InvalidCoordinatorUsageError
+from ..security.credentials import SecureCredentials
+from ..security.grpc_auth_interceptor import StaticAuthMetadata, WalletTlsAuthClientInterceptor
+from ..security.tls_peer_key import fetch_peer_rsa_spki_mtls, TlsProbeError, is_tls_connection
+from ..security.wallet_gelegation import AuthError
 
 logger = logging.getLogger("model_runner_client.model_runner")
 
@@ -20,6 +24,7 @@ class ModelRunner:
         FAILED = "FAILED"
         BAD_IMPLEMENTATION = "BAD_IMPLEMENTATION"
         ABORTED = "ABORTED"
+        AUTH_ERROR = "AUTH_ERROR"
 
     def __init__(
         self,
@@ -29,9 +34,10 @@ class ModelRunner:
         ip: str,
         port: int,
         infos: dict[str, Any],
-        retry_backoff_factor: float = 2
+        retry_backoff_factor: float = 2,
+        secure_credentials: SecureCredentials | None = None
     ):
-        self.runner_id = uuid.uuid4().hex # unique identifier per instance
+        self.runner_id = uuid.uuid4().hex  # unique identifier per instance
         self.deployment_id = deployment_id
         self.model_id = model_id
         self.model_name = model_name
@@ -50,12 +56,15 @@ class ModelRunner:
         self.consecutive_timeouts = 0
         self.cooldown_calls_remaining = 0
 
+        self.secure_credentials = secure_credentials
+        self.server_hostname = f"model-node-{self.model_id}.crunchdao.internal"
+
     @abc.abstractmethod
     async def setup(self, grpc_channel) -> tuple[bool, ErrorType | None]:
         pass
 
     async def init(self) -> tuple[bool, ErrorType | None]:
-        options = [
+        self.grpc_options: list[tuple[str, any]] = [
             # Very fast reconnection
             ("grpc.initial_reconnect_backoff_ms", 100),  # 100 ms on the first attempt
             ("grpc.min_reconnect_backoff_ms", 100),  # minimum 100 ms
@@ -68,16 +77,21 @@ class ModelRunner:
             ("grpc.keepalive_permit_without_calls", 0),
         ]
 
+        is_secure_connection = self.secure_credentials is not None
+        if is_secure_connection:
+            self.grpc_options.append(("grpc.ssl_target_name_override", self.server_hostname))
+            self.grpc_options.append(("grpc.default_authority", self.server_hostname))
+
         grpc_setup_timeout = 10  # 10s
         for attempt in range(1, self.retry_attempts + 1):
             if self.closed:
                 logger.debug(f"Model runner {self.model_id} closed, aborting initialization")
                 return False, self.ErrorType.ABORTED
             try:
-                # Main gRPC channel (for model interaction)
-                self.grpc_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", options)
-                # Separate health check channel (isolated TCP connection)
-                self.grpc_health_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", options)
+                if is_secure_connection:
+                    await self._connect_secure_channels()
+                else:
+                    self._connect_insecure_channels()
 
                 await asyncio.wait_for(self.grpc_channel.channel_ready(), timeout=grpc_setup_timeout)
                 await asyncio.wait_for(self.grpc_health_channel.channel_ready(), timeout=grpc_setup_timeout)
@@ -89,11 +103,18 @@ class ModelRunner:
                 return setup_succeed, error
 
             except (AioRpcError, asyncio.TimeoutError) as e:
-                logger.warning(f"Model runner {self.model_id} initialization failed due to connection or timeout error.")
+                if not is_secure_connection and await is_tls_connection(self.ip, self.port):
+                    raise InvalidCoordinatorUsageError("The Model Nodes are in secure mode and credentials were not provided for connection.")
+
+                logger.warning(f"Initialization of model runner {self.model_id} failed due to a connection or timeout error: {e}")
                 last_error = e
 
             except InvalidCoordinatorUsageError:
                 raise
+
+            except (AuthError, TlsProbeError) as e:
+                logger.warning(f"Model runner {self.model_id} initialization failed due to authentication error => {e}")
+                return False, self.ErrorType.AUTH_ERROR
 
             # too large todo improve
             except Exception as e:
@@ -147,6 +168,48 @@ class ModelRunner:
                 return True
 
         return False
+
+    def _connect_insecure_channels(self):
+        # Main gRPC channel (for model interaction)
+        self.grpc_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", self.grpc_options)
+        # Separate health check channel (isolated TCP connection)
+        self.grpc_health_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", self.grpc_options)
+
+    async def _connect_secure_channels(self):
+        target = f"{self.ip}:{self.port}"
+        peer_tls = await fetch_peer_rsa_spki_mtls(
+            host=self.ip,
+            port=self.port,
+            tls_ctx=self.secure_credentials.tls_ctx,
+            server_hostname=self.server_hostname
+        )
+
+        client_creds = grpc.ssl_channel_credentials(
+            root_certificates=peer_tls.leaf_cert_pem,
+            private_key=self.secure_credentials.key_bytes,
+            certificate_chain=self.secure_credentials.cert_bytes,
+        )
+
+        call_creds = grpc.metadata_call_credentials(StaticAuthMetadata(self.secure_credentials.metadata))
+
+        channel_creds = grpc.composite_channel_credentials(client_creds, call_creds)
+
+        self.grpc_channel = grpc.aio.secure_channel(
+            target=target,
+            credentials=channel_creds,
+            options=self.grpc_options,
+            interceptors=[
+                WalletTlsAuthClientInterceptor(
+                    expected_wallet_pub_b58=self.infos.get("cruncher_wallet_pubkey"),
+                    expected_hotkey=self.infos.get("cruncher_hotkey"),
+                    expected_model_id=self.model_id,
+                    tls_pub=peer_tls.spki_der
+                )
+            ]
+        )
+
+        # Separate health check channel (isolated TCP connection)
+        self.grpc_health_channel = grpc.aio.secure_channel(target, channel_creds, self.grpc_options)
 
     async def close(self):
         self.closed = True
