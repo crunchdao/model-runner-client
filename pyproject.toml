@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "model-runner-client"
-version = "0.10.0"
+version = "0.11.0"
 description = "Model Runner Client is a Python library that allows Coordinators to manage real-time model synchronization and perform concurrent predictions on distributed model nodes within a Crunch."
 authors = ["boutrig abdennour <abdennour.boutrig@crunchdao.com>"]
 readme = "README.md"
