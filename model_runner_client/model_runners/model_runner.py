@@ -11,7 +11,7 @@ from grpc.aio import AioRpcError
 
 from ..errors import InvalidCoordinatorUsageError
 from ..security.credentials import SecureCredentials
-from ..security.grpc_auth_interceptor import StaticAuthMetadata, WalletTlsAuthClientInterceptor
+from ..security.grpc_auth_interceptor import WalletTlsAuthClientInterceptor
 from ..security.tls_peer_key import fetch_peer_rsa_spki_mtls, TlsProbeError, is_tls_connection
 from ..security.wallet_gelegation import AuthError
 
@@ -184,15 +184,11 @@ class ModelRunner:
             server_hostname=self.server_hostname
         )
 
-        client_creds = grpc.ssl_channel_credentials(
+        channel_creds = grpc.ssl_channel_credentials(
             root_certificates=peer_tls.leaf_cert_pem,
             private_key=self.secure_credentials.key_bytes,
             certificate_chain=self.secure_credentials.cert_bytes,
         )
-
-        call_creds = grpc.metadata_call_credentials(StaticAuthMetadata(self.secure_credentials.metadata))
-
-        channel_creds = grpc.composite_channel_credentials(client_creds, call_creds)
 
         self.grpc_channel = grpc.aio.secure_channel(
             target=target,
