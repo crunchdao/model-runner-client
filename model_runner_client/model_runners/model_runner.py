@@ -11,6 +11,8 @@ from grpc.aio import AioRpcError
 
 from ..errors import InvalidCoordinatorUsageError
 from ..security.credentials import SecureCredentials
+from ..security.gateway_auth_interceptor import GatewayAuthClientInterceptor
+from ..security.gateway_credentials import GatewayCredentials
 from ..security.grpc_auth_interceptor import WalletTlsAuthClientInterceptor
 from ..security.tls_peer_key import fetch_peer_rsa_spki_mtls, TlsProbeError, is_tls_connection
 from ..security.wallet_gelegation import AuthError
@@ -35,7 +37,8 @@ class ModelRunner:
         port: int,
         infos: dict[str, Any],
         retry_backoff_factor: float = 2,
-        secure_credentials: SecureCredentials | None = None
+        secure_credentials: SecureCredentials | None = None,
+        gateway_credentials: GatewayCredentials | None = None,
     ):
         self.runner_id = uuid.uuid4().hex  # unique identifier per instance
         self.deployment_id = deployment_id
@@ -56,7 +59,11 @@ class ModelRunner:
         self.consecutive_timeouts = 0
         self.cooldown_calls_remaining = 0
 
+        if secure_credentials and gateway_credentials:
+            raise ValueError("secure_credentials and gateway_credentials are mutually exclusive")
+
         self.secure_credentials = secure_credentials
+        self.gateway_credentials = gateway_credentials
         self.server_hostname = f"model-node-{self.model_id}.crunchdao.internal"
 
     @abc.abstractmethod
@@ -78,6 +85,7 @@ class ModelRunner:
         ]
 
         is_secure_connection = self.secure_credentials is not None
+        is_gateway_connection = self.gateway_credentials is not None
         if is_secure_connection:
             self.grpc_options.append(("grpc.ssl_target_name_override", self.server_hostname))
             self.grpc_options.append(("grpc.default_authority", self.server_hostname))
@@ -90,6 +98,8 @@ class ModelRunner:
             try:
                 if is_secure_connection:
                     await self._connect_secure_channels()
+                elif is_gateway_connection:
+                    self._connect_gateway_channels()
                 else:
                     self._connect_insecure_channels()
 
@@ -174,6 +184,29 @@ class ModelRunner:
         self.grpc_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", self.grpc_options)
         # Separate health check channel (isolated TCP connection)
         self.grpc_health_channel = grpc.aio.insecure_channel(f"{self.ip}:{self.port}", self.grpc_options)
+
+    def _connect_gateway_channels(self):
+        """Connect via TLS-terminating gateway (e.g. Phala CVM) with signed-token auth."""
+        target = f"{self.ip}:{self.port}"
+        credentials = grpc.ssl_channel_credentials()
+
+        self.grpc_channel = grpc.aio.secure_channel(
+            target=target,
+            credentials=credentials,
+            options=self.grpc_options,
+            interceptors=[
+                GatewayAuthClientInterceptor(
+                    private_key=self.gateway_credentials.private_key,
+                    model_id=self.model_id,
+                )
+            ],
+        )
+        # Health check channel — standard TLS, no auth interceptor needed
+        self.grpc_health_channel = grpc.aio.secure_channel(
+            target=target,
+            credentials=credentials,
+            options=self.grpc_options,
+        )
 
     async def _connect_secure_channels(self):
         target = f"{self.ip}:{self.port}"

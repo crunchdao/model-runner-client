@@ -60,6 +60,7 @@ class DynamicSubclassModelConcurrentRunner(ModelConcurrentRunner):
             self.instance_args,
             self.instance_kwargs,
             secure_credentials=self.secure_credentials,
+            gateway_credentials=self.gateway_credentials,
             **kwargs
         )
 

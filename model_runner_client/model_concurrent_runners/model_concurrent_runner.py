@@ -12,6 +12,7 @@ from grpc_health.v1 import health_pb2, health_pb2_grpc
 from ..model_cluster import ModelCluster
 from ..model_runners import ModelRunner
 from ..security.credentials import SecureCredentials
+from ..security.gateway_credentials import GatewayCredentials
 from ..security.wallet_gelegation import AuthError
 
 logger = logging.getLogger("model_runner_client")
@@ -80,6 +81,7 @@ class ModelConcurrentRunner(ABC):
         max_consecutive_failures: int = MAX_CONSECUTIVE_FAILURES,
         max_consecutive_timeouts: int = MAX_CONSECUTIVE_TIMEOUTS,
         secure_credentials: SecureCredentials | None = None,
+        gateway_credentials: GatewayCredentials | None = None,
         report_failure: bool = True,
     ):
         self.timeout = timeout
@@ -98,6 +100,7 @@ class ModelConcurrentRunner(ABC):
 
         self.health_check_threshold = max(1, int(self.max_consecutive_timeout * 0.2))
         self.secure_credentials = secure_credentials
+        self.gateway_credentials = gateway_credentials
 
         # TODO: Add recovery mode functionality for handling model timeouts.
         # self.enable_recovery_mode
