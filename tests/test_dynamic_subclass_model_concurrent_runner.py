@@ -207,7 +207,7 @@ class TestDynamicSubclassModelConcurrentRunner(IsolatedAsyncioTestCase):
                         "model_name": "test_name",
                         "state": "RUNNING",
                         "ip": "127.0.0.1",
-                        "port": 5001,
+                        "port": 5000,
                         "infos": {"model_name": "test1b_model_name", "cruncher_id": "test1b_cruncher_id", "cruncher_name": "test1b_cruncher_name"}
                     }
                 ]

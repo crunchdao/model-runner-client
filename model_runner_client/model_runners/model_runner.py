@@ -47,7 +47,7 @@ class ModelRunner:
         self.ip = ip
         self.port = port
         self.infos = infos
-        logger.info(f"New model runner created: {self.model_id}, {self.model_name}, {self.ip}:{self.port}, let's connect it")
+        logger.debug(f"ModelRunner created: {self.model_id} ({self.model_name}) at {self.ip}:{self.port}")
         self.retry_backoff_factor = retry_backoff_factor
 
         self.grpc_channel = None
@@ -109,7 +109,7 @@ class ModelRunner:
                 # todo what happen is this take long time, need to add timeout ????
                 setup_succeed, error = await self.setup(self.grpc_channel)
                 if setup_succeed:
-                    logger.info(f"model runner: {self.model_id}, {self.model_name}, is connected and ready")
+                    logger.info(f"Model {self.model_id} ({self.model_name}) connected at {self.ip}:{self.port}")
                 return setup_succeed, error
 
             except (AioRpcError, asyncio.TimeoutError) as e:
@@ -128,6 +128,9 @@ class ModelRunner:
 
             # too large todo improve
             except Exception as e:
+                if self.closed:
+                    logger.debug(f"Model runner {self.model_id} closed during initialization, aborting")
+                    return False, self.ErrorType.ABORTED
                 logger.error(f"Unexpected error during initialization of model {self.model_id}", exc_info=True)
                 last_error = e
 

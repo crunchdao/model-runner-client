@@ -41,7 +41,7 @@ class WebsocketClient:
 
         while self.max_retries > retry_count:
             try:
-                logger.info(f"Connecting to WebSocket server at {uri}")
+                logger.debug(f"Connecting to WebSocket server at {uri}")
                 self.websocket = await websockets.connect(uri)
                 logger.info(f"Connected to WebSocket server at {uri}")
                 break
@@ -81,7 +81,7 @@ class WebsocketClient:
                     await self.connect()
                     await self._send_pending_messages()
 
-                logger.info("Listening for messages...")
+                logger.debug("Listening for messages...")
                 async for message in self.websocket:
                     await self.handle_event(message)
             except (websockets.exceptions.ConnectionClosed, asyncio.TimeoutError):
