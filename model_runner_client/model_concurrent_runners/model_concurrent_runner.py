@@ -198,13 +198,17 @@ class ModelConcurrentRunner(ABC):
         except (asyncio.TimeoutError, AioRpcError) as e:
             exec_time = exec_time_f()
 
-            logger.debug(
-                f"Method {method_name} on model {model.model_id}, {model.model_name} timed out after {timeout} seconds.",
-                exc_info=True
-            )
-
-            if not (isinstance(e, AioRpcError) and (e.code() in {StatusCode.RESOURCE_EXHAUSTED, StatusCode.DEADLINE_EXCEEDED})) and not isinstance(e, asyncio.TimeoutError):
-                logger.error(f"Unexpected error during concurrent execution of method {method_name} on model {model.model_id}", exc_info=True)
+            if isinstance(e, asyncio.TimeoutError):
+                logger.debug(f"Model {model.model_id}: {method_name} timed out after {timeout}s")
+            elif isinstance(e, AioRpcError):
+                if e.code() in {StatusCode.DEADLINE_EXCEEDED}:
+                    logger.debug(f"Model {model.model_id}: {method_name} deadline exceeded")
+                elif e.code() in {StatusCode.UNAVAILABLE}:
+                    logger.debug(f"Model {model.model_id}: {method_name} unavailable ({e.details()})")
+                elif e.code() in {StatusCode.RESOURCE_EXHAUSTED}:
+                    logger.debug(f"Model {model.model_id}: {method_name} resource exhausted")
+                else:
+                    logger.warning(f"Model {model.model_id}: {method_name} gRPC error {e.code().name}: {e.details()}")
 
             health_serving = True
 
@@ -220,7 +224,7 @@ class ModelConcurrentRunner(ABC):
                     health_serving = (resp.status == health_pb2.HealthCheckResponse.SERVING)
                 except Exception as he:
                     health_serving = False
-                    logger.warning(f"Health check failed for model {model.model_id}, {model.model_name}: {he}")
+                    logger.debug(f"Health check failed for model {model.model_id}, {model.model_name}: {he}")
 
             # Determine action: penalize or reconnect
             if health_serving:
