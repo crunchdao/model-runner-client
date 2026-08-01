@@ -29,18 +29,19 @@ class ModelPredictResult:
     result: Any
     status: Status
     exec_time_us: int
+    detail: str | None = None
 
     @staticmethod
-    def of_success(model_runner: ModelRunner, result: Any, exec_time: int) -> 'ModelPredictResult':
-        return ModelPredictResult(model_runner, result, ModelPredictResult.Status.SUCCESS, exec_time)
+    def of_success(model_runner: ModelRunner, result: Any, exec_time: int, *, detail: str | None = None) -> 'ModelPredictResult':
+        return ModelPredictResult(model_runner, result, ModelPredictResult.Status.SUCCESS, exec_time, detail)
 
     @staticmethod
-    def of_failed(model_runner: ModelRunner, exec_time: int) -> 'ModelPredictResult':
-        return ModelPredictResult(model_runner, None, ModelPredictResult.Status.FAILED, exec_time)
+    def of_failed(model_runner: ModelRunner, exec_time: int, *, detail: str | None = None) -> 'ModelPredictResult':
+        return ModelPredictResult(model_runner, None, ModelPredictResult.Status.FAILED, exec_time, detail)
 
     @staticmethod
-    def of_timeout(model_runner: ModelRunner, exec_time: int) -> 'ModelPredictResult':
-        return ModelPredictResult(model_runner, None, ModelPredictResult.Status.TIMEOUT, exec_time)
+    def of_timeout(model_runner: ModelRunner, exec_time: int, *, detail: str | None = None) -> 'ModelPredictResult':
+        return ModelPredictResult(model_runner, None, ModelPredictResult.Status.TIMEOUT, exec_time, detail)
 
 
 class ModelConcurrentRunner(ABC):
@@ -170,7 +171,7 @@ class ModelConcurrentRunner(ABC):
             method = getattr(model, method_name)
 
             if model.should_skip_for_timeout_reason():
-                raise asyncio.TimeoutError()
+                raise asyncio.TimeoutError(f"PREEMPTIVE_SKIP: {model.consecutive_timeouts} consecutive timeouts")
 
             try:
                 result, error = await method(*args, **kwargs, timeout=timeout)
@@ -193,14 +194,18 @@ class ModelConcurrentRunner(ABC):
                 if self.max_consecutive_failures and model.consecutive_failures > self.max_consecutive_failures:
                     asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_FAILED'))
 
-            return ModelPredictResult.of_failed(model, exec_time)
+            detail = error.value if hasattr(error, "value") else str(error)
+            return ModelPredictResult.of_failed(model, exec_time, detail=detail)
 
         except (asyncio.TimeoutError, AioRpcError) as e:
             exec_time = exec_time_f()
+            detail = str(e)
 
             if isinstance(e, asyncio.TimeoutError):
+                detail = str(e) or "DEADLINE_EXCEEDED"
                 logger.debug(f"Model {model.model_id}: {method_name} timed out after {timeout}s")
             elif isinstance(e, AioRpcError):
+                detail = f"{e.code().name}: {e.details()}"
                 if e.code() in {StatusCode.DEADLINE_EXCEEDED}:
                     logger.debug(f"Model {model.model_id}: {method_name} deadline exceeded")
                 elif e.code() in {StatusCode.UNAVAILABLE}:
@@ -236,13 +241,13 @@ class ModelConcurrentRunner(ABC):
             if self.max_consecutive_timeout and model.consecutive_timeouts > self.max_consecutive_timeout:
                 asyncio.create_task(self.model_cluster.process_failure(model, 'MULTIPLE_TIMEOUT'))
 
-            return ModelPredictResult.of_timeout(model, exec_time)
+            return ModelPredictResult.of_timeout(model, exec_time, detail=detail)
 
         except AuthError as e:
             logger.error(f"Auth error during concurrent execution of method {method_name} on model {model.model_id}: {e}")
             asyncio.create_task(self.model_cluster.process_failure(model, 'CONNECTION_FAILED', str(e)))
 
-        except Exception:
+        except Exception as e:
             logger.error(f"Unexpected error during concurrent execution of method {method_name} on model {model.model_id}", exc_info=True)
 
-            return ModelPredictResult.of_failed(model, exec_time_f())
+            return ModelPredictResult.of_failed(model, exec_time_f(), detail=str(e))
