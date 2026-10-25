@@ -44,6 +44,21 @@ class TestModelRunner(IsolatedAsyncioTestCase):
         self.assertEqual(error, ModelRunner.ErrorType.GRPC_CONNECTION_FAILED)
 
     @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
+    async def test_init_setup_timeout(self, mock_insecure_channel):
+        mock_insecure_channel.return_value.channel_ready = AsyncMock(return_value=False)
+
+        async def never_answers(_):
+            await asyncio.sleep(3600)
+
+        self.runner.setup = AsyncMock(side_effect=never_answers)
+        self.runner.setup_timeout = 0.05
+        success, error = await self.runner.init()
+
+        self.runner.setup.assert_called_once()  # no retry after a setup timeout
+        self.assertFalse(success)
+        self.assertEqual(error, ModelRunner.ErrorType.GRPC_CONNECTION_FAILED)
+
+    @patch('model_runner_client.model_runners.model_runner.grpc.aio.insecure_channel')
     async def test_init_aborted(self, mock_insecure_channel):
         await self.runner.close()
 

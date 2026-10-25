@@ -53,6 +53,7 @@ class ModelRunner:
         self.grpc_channel = None
         self.grpc_health_channel = None
         self.retry_attempts = 5  # args ?
+        self.setup_timeout = 120  # 2 minutes
         self.min_retry_interval = 2  # 2 seconds
         self.closed = False
         self.consecutive_failures = 0
@@ -106,8 +107,11 @@ class ModelRunner:
                 await asyncio.wait_for(self.grpc_channel.channel_ready(), timeout=grpc_setup_timeout)
                 await asyncio.wait_for(self.grpc_health_channel.channel_ready(), timeout=grpc_setup_timeout)
 
-                # todo what happen is this take long time, need to add timeout ????
-                setup_succeed, error = await self.setup(self.grpc_channel)
+                try:
+                    setup_succeed, error = await asyncio.wait_for(self.setup(self.grpc_channel), timeout=self.setup_timeout)
+                except asyncio.TimeoutError:
+                    logger.error(f"Model {self.model_id} setup did not answer within {self.setup_timeout}s, giving up")
+                    return False, self.ErrorType.GRPC_CONNECTION_FAILED
                 if setup_succeed:
                     logger.info(f"Model {self.model_id} ({self.model_name}) connected at {self.ip}:{self.port}")
                 return setup_succeed, error
